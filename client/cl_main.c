@@ -4076,7 +4076,7 @@ void CL_Synchronous_Frame (int msec)
 
 	if (cls.spamTime && cls.spamTime < cls.realtime)
 	{
-		Cbuf_AddText ("say \"" PRODUCTNAME " " VERSION " " __TIMESTAMP__ " " CPUSTRING " " BUILDSTRING " [http://r1ch.net/r1q2]\"\n");
+		Cbuf_AddText ("say \"" PRODUCTNAME " " VERSION " " __TIMESTAMP__ " " CPUSTRING " " BUILDSTRING " [http://quake2.ovh]\"\n");
 		cls.lastSpamTime = cls.realtime;
 		cls.spamTime = 0;
 	}
@@ -4242,7 +4242,7 @@ void CL_Frame (int msec)
 			if (cls.spamTime && cls.spamTime < cls.realtime)
 			{
 				char buff[256];
-				Com_sprintf (buff, sizeof(buff), "say \"R1Q2 %s %s %s %s [http://r1ch.net/r1q2]\"\n", VERSION,
+				Com_sprintf (buff, sizeof(buff), "say \"R1Q2-AI %s %s %s %s [https://quake2.ovh]\"\n", VERSION,
 					__TIMESTAMP__, CPUSTRING, BUILDSTRING
 				);
 				Cbuf_AddText (buff);

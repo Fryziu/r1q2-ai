@@ -26,12 +26,15 @@ cvar_t	*cl_http_filelists;
 cvar_t	*cl_http_proxy;
 cvar_t	*cl_http_max_connections;
 
-static enum
+enum
 {
 	HTTPDL_ABORT_NONE,
 	HTTPDL_ABORT_SOFT,
 	HTTPDL_ABORT_HARD
 };
+
+#define HTTP_MAX_FILELIST_SIZE (1024 * 1024)
+#define HTTP_INITIAL_FILELIST_SIZE (128 * 1024)
 
 static CURLM	*multi = NULL;
 static int		handleCount = 0;
@@ -62,13 +65,13 @@ libcurl callback to update progress info. Mainly just used as
 a way to cancel the transfer if required.
 ===============
 */
-static int EXPORT CL_HTTP_Progress (void *clientp, double dltotal, double dlnow, double ultotal, double ulnow)
+static int EXPORT CL_HTTP_Progress (void *clientp, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow)
 {
 	dlhandle_t *dl;
 
 	dl = (dlhandle_t *)clientp;
 
-	dl->position = (unsigned)dlnow;
+	dl->position = (size_t)dlnow;
 
 	//don't care which download shows as long as something does :)
 	if (!abortDownloads)
@@ -77,7 +80,7 @@ static int EXPORT CL_HTTP_Progress (void *clientp, double dltotal, double dlnow,
 		cls.downloadposition = dl->position;
 
 		if (dltotal)
-			cls.downloadpercent = (int)((dlnow / dltotal) * 100.0f);
+			cls.downloadpercent = (int)(((double)dlnow / (double)dltotal) * 100.0);
 		else
 			cls.downloadpercent = 0;
 	}
@@ -141,42 +144,33 @@ the entire URL...
 */
 static void CL_EscapeHTTPPath (const char *filePath, char *escaped)
 {
-	int		i;
-	size_t	len;
-	char	*p;
+	static const char hex[] = "0123456789abcdef";
+	byte c;
 
-	p = escaped;
-
-	len = strlen (filePath);
-	for (i = 0; i < len; i++)
+	while ((c = (byte)*filePath++) != 0)
 	{
-		if (!isalnum (filePath[i]) && filePath[i] != ';' && filePath[i] != '/' &&
-			filePath[i] != '?' && filePath[i] != ':' && filePath[i] != '@' && filePath[i] != '&' &&
-			filePath[i] != '=' && filePath[i] != '+' && filePath[i] != '$' && filePath[i] != ',' &&
-			filePath[i] != '[' && filePath[i] != ']' && filePath[i] != '-' && filePath[i] != '_' &&
-			filePath[i] != '.' && filePath[i] != '!' && filePath[i] != '~' && filePath[i] != '*' &&
-			filePath[i] != '\'' && filePath[i] != '(' && filePath[i] != ')')
+		if (!isalnum (c) && !strchr ("/-_.~", c))
 		{
-			sprintf (p, "%%%02x", filePath[i]);
-			p += 3;
+			escaped[0] = '%';
+			escaped[1] = hex[c >> 4];
+			escaped[2] = hex[c & 15];
+			escaped += 3;
 		}
 		else
 		{
-			*p = filePath[i];
-			p++;
+			*escaped++ = c;
 		}
 	}
-	p[0] = 0;
+	*escaped = 0;
+}
 
-	//using ./ in a url is legal, but all browsers condense the path and some IDS / request
-	//filtering systems act a bit funky if http requests come in with uncondensed paths.
-	len = strlen(escaped);
-	p = escaped;
-	while ((p = strstr (p, "./")))
-	{
-		memmove (p, p+2, len - (p - escaped) - 1);
-		len -= 2;
-	}
+// Q2Pro uses the logical game directory, never the local filesystem path.
+static const char *CL_HTTPGamedir (void)
+{
+	if (cl.gamedir[0])
+		return cl.gamedir;
+
+	return BASEDIRNAME;
 }
 
 /*
@@ -188,28 +182,41 @@ libcurl callback for filelists.
 */
 static size_t EXPORT CL_HTTP_Recv (void *ptr, size_t size, size_t nmemb, void *stream)
 {
-	size_t		bytes;
 	dlhandle_t	*dl;
+	size_t		bytes;
+	size_t		newSize;
+	size_t		required;
 
 	dl = (dlhandle_t *)stream;
 
+	if (!size || !nmemb)
+		return 0;
+
 	bytes = size * nmemb;
+	if (bytes / size != nmemb)
+		return 0;
 
-	if (!dl->fileSize)
+	if (dl->position >= HTTP_MAX_FILELIST_SIZE ||
+		bytes >= HTTP_MAX_FILELIST_SIZE - dl->position)
+		return 0;
+
+	required = dl->position + bytes + 1;
+	newSize = dl->fileSize ? dl->fileSize : HTTP_INITIAL_FILELIST_SIZE;
+	while (newSize < required)
+		newSize *= 2;
+
+	if (newSize > dl->fileSize)
 	{
-		dl->fileSize = bytes > 131072 ? bytes : 131072;
-		dl->tempBuffer = Z_TagMalloc ((int)dl->fileSize, TAGMALLOC_CLIENT_DOWNLOAD);
-	}
-	else if (dl->position + bytes >= dl->fileSize - 1)
-	{
-		char		*tmp;
+		char *tmp;
 
-		tmp = dl->tempBuffer;
-
-		dl->tempBuffer = Z_TagMalloc ((int)(dl->fileSize*2), TAGMALLOC_CLIENT_DOWNLOAD);
-		memcpy (dl->tempBuffer, tmp, dl->fileSize);
-		Z_Free (tmp);
-		dl->fileSize *= 2;
+		tmp = Z_TagMalloc ((int)newSize, TAGMALLOC_CLIENT_DOWNLOAD);
+		if (dl->tempBuffer)
+		{
+			memcpy (tmp, dl->tempBuffer, dl->position);
+			Z_Free (dl->tempBuffer);
+		}
+		dl->tempBuffer = tmp;
+		dl->fileSize = newSize;
 	}
 
 	memcpy (dl->tempBuffer + dl->position, ptr, bytes);
@@ -241,10 +248,27 @@ Actually starts a download by adding it to the curl multi
 handle.
 ===============
 */
+static void CL_HTTPDownloadFailed (dlqueue_t *entry, dlhandle_t *dl)
+{
+	if (dl->file)
+	{
+		fclose (dl->file);
+		remove (dl->filePath);
+		dl->file = NULL;
+	}
+
+	entry->state = DLQ_STATE_DONE;
+	if (pendingCount)
+		pendingCount--;
+
+	if (!CL_PendingHTTPDownloads() && cls.state == ca_connected)
+		CL_RequestNextDownload();
+}
+
 static void CL_StartHTTPDownload (dlqueue_t *entry, dlhandle_t *dl)
 {
-	size_t		len;
-	char		tempFile[MAX_OSPATH];
+	int			len;
+	char		tempFile[MAX_QPATH];
 	char		escapedFilePath[MAX_QPATH*4];
 	
 	//yet another hack to accomodate filelists, how i wish i could push :(
@@ -253,16 +277,25 @@ static void CL_StartHTTPDownload (dlqueue_t *entry, dlhandle_t *dl)
 	if (len > 9 && !strcmp (entry->quakePath + len - 9, ".filelist"))
 	{
 		dl->file = NULL;
+		dl->filePath[0] = 0;
 		CL_EscapeHTTPPath (entry->quakePath, escapedFilePath);
 	}
 	else
 	{
-		Com_sprintf (dl->filePath, sizeof(dl->filePath), "%s/%s", FS_Gamedir(), entry->quakePath);
+		len = snprintf (dl->filePath, sizeof(dl->filePath), "%s/%s.tmp", FS_Gamedir(), entry->quakePath);
+		if (len < 0 || len >= (int)sizeof(dl->filePath))
+		{
+			Com_Printf ("CL_StartHTTPDownload: Refusing oversize temporary file path.\n", LOG_CLIENT | LOG_WARNING);
+			goto fail;
+		}
 
-		Com_sprintf (tempFile, sizeof(tempFile), "%s/%s", cl.gamedir, entry->quakePath);
-		CL_EscapeHTTPPath (dl->filePath, escapedFilePath);
-
-		strcat (dl->filePath, ".tmp");
+		len = snprintf (tempFile, sizeof(tempFile), "%s/%s", CL_HTTPGamedir(), entry->quakePath);
+		if (len < 0 || len >= (int)sizeof(tempFile))
+		{
+			Com_Printf ("CL_StartHTTPDownload: Refusing oversize server file path.\n", LOG_CLIENT | LOG_WARNING);
+			goto fail;
+		}
+		CL_EscapeHTTPPath (tempFile, escapedFilePath);
 
 		FS_CreatePath (dl->filePath);
 
@@ -271,9 +304,7 @@ static void CL_StartHTTPDownload (dlqueue_t *entry, dlhandle_t *dl)
 		if (!dl->file)
 		{
 			Com_Printf ("CL_StartHTTPDownload: Couldn't open %s for writing.\n", LOG_CLIENT | LOG_WARNING, dl->filePath);
-			entry->state = DLQ_STATE_DONE;
-			//CL_RemoveHTTPDownload (entry->quakePath);
-			return;
+			goto fail;
 		}
 	}
 
@@ -285,30 +316,48 @@ static void CL_StartHTTPDownload (dlqueue_t *entry, dlhandle_t *dl)
 
 	if (!dl->curl)
 		dl->curl = curl_easy_init ();
+	if (!dl->curl)
+	{
+		Com_Printf ("CL_StartHTTPDownload: curl_easy_init failed.\n", LOG_CLIENT | LOG_WARNING);
+		goto fail;
+	}
 
-	Com_sprintf (dl->URL, sizeof(dl->URL), "%s%s", cls.downloadServer, escapedFilePath);
+	len = snprintf (dl->URL, sizeof(dl->URL), "%s%s", cls.downloadServer, escapedFilePath);
+	if (len < 0 || len >= (int)sizeof(dl->URL))
+	{
+		Com_Printf ("CL_StartHTTPDownload: Refusing oversize download URL.\n", LOG_CLIENT | LOG_WARNING);
+		goto fail;
+	}
 
-	curl_easy_setopt (dl->curl, CURLOPT_ENCODING, "");
+	curl_easy_setopt (dl->curl, CURLOPT_ACCEPT_ENCODING, "");
 	//curl_easy_setopt (dl->curl, CURLOPT_DEBUGFUNCTION, CL_CURL_Debug);
 	//curl_easy_setopt (dl->curl, CURLOPT_VERBOSE, 1);
-	curl_easy_setopt (dl->curl, CURLOPT_NOPROGRESS, 0);
+	curl_easy_setopt (dl->curl, CURLOPT_NOPROGRESS, 0L);
 	if (dl->file)
 	{
 		curl_easy_setopt (dl->curl, CURLOPT_WRITEDATA, dl->file);
 		curl_easy_setopt (dl->curl, CURLOPT_WRITEFUNCTION, NULL);
+		curl_easy_setopt (dl->curl, CURLOPT_MAXFILESIZE, 0L);
 	}
 	else
 	{
 		curl_easy_setopt (dl->curl, CURLOPT_WRITEDATA, dl);
 		curl_easy_setopt (dl->curl, CURLOPT_WRITEFUNCTION, CL_HTTP_Recv);
+		curl_easy_setopt (dl->curl, CURLOPT_MAXFILESIZE, HTTP_MAX_FILELIST_SIZE - 1L);
 	}
 	curl_easy_setopt (dl->curl, CURLOPT_PROXY, cl_http_proxy->string);
-	curl_easy_setopt (dl->curl, CURLOPT_FOLLOWLOCATION, 1);
-	curl_easy_setopt (dl->curl, CURLOPT_MAXREDIRS, 5);
+	curl_easy_setopt (dl->curl, CURLOPT_FOLLOWLOCATION, 1L);
+	curl_easy_setopt (dl->curl, CURLOPT_MAXREDIRS, 5L);
+	curl_easy_setopt (dl->curl, CURLOPT_CONNECTTIMEOUT, 10L);
+	curl_easy_setopt (dl->curl, CURLOPT_LOW_SPEED_LIMIT, 1024L);
+	curl_easy_setopt (dl->curl, CURLOPT_LOW_SPEED_TIME, 30L);
+	curl_easy_setopt (dl->curl, CURLOPT_NOSIGNAL, 1L);
+	curl_easy_setopt (dl->curl, CURLOPT_PROTOCOLS_STR, "http,https");
+	curl_easy_setopt (dl->curl, CURLOPT_REDIR_PROTOCOLS_STR, "http,https");
 	curl_easy_setopt (dl->curl, CURLOPT_WRITEHEADER, dl);
 	curl_easy_setopt (dl->curl, CURLOPT_HEADERFUNCTION, CL_HTTP_Header);
-	curl_easy_setopt (dl->curl, CURLOPT_PROGRESSFUNCTION, CL_HTTP_Progress);
-	curl_easy_setopt (dl->curl, CURLOPT_PROGRESSDATA, dl);
+	curl_easy_setopt (dl->curl, CURLOPT_XFERINFOFUNCTION, CL_HTTP_Progress);
+	curl_easy_setopt (dl->curl, CURLOPT_XFERINFODATA, dl);
 	curl_easy_setopt (dl->curl, CURLOPT_USERAGENT, Cvar_VariableString ("version"));
 	curl_easy_setopt (dl->curl, CURLOPT_REFERER, cls.downloadReferer);
 	curl_easy_setopt (dl->curl, CURLOPT_URL, dl->URL);
@@ -316,14 +365,17 @@ static void CL_StartHTTPDownload (dlqueue_t *entry, dlhandle_t *dl)
 	if (curl_multi_add_handle (multi, dl->curl) != CURLM_OK)
 	{
 		Com_Printf ("curl_multi_add_handle: error\n", LOG_ERROR|LOG_CLIENT);
-		dl->queueEntry->state = DLQ_STATE_DONE;
-		return;
+		goto fail;
 	}
 
 	handleCount++;
 	//Com_Printf ("started dl: hc = %d\n", LOG_GENERAL, handleCount);
 	Com_DPrintf  ("CL_StartHTTPDownload: Fetching %s...\n", dl->URL);
 	dl->queueEntry->state = DLQ_STATE_RUNNING;
+	return;
+
+fail:
+	CL_HTTPDownloadFailed (entry, dl);
 }
 
 /*
@@ -335,7 +387,13 @@ Init libcurl and multi handle.
 */
 void CL_InitHTTPDownloads (void)
 {
-	curl_global_init (CURL_GLOBAL_NOTHING);
+	if (curl_global_init (CURL_GLOBAL_NOTHING) != CURLE_OK)
+	{
+		httpDown = true;
+		Com_Printf ("curl_global_init failed; HTTP downloading disabled.\n", LOG_CLIENT | LOG_WARNING);
+		return;
+	}
+
 	//Com_Printf ("%s initialized.\n", LOG_CLIENT, curl_version());
 }
 
@@ -349,6 +407,7 @@ A new server is specified, so we nuke all our state.
 void CL_SetHTTPServer (const char *URL)
 {
 	dlqueue_t	*q, *last;
+	size_t		urlLen;
 
 	CL_HTTP_Cleanup (false);
 
@@ -372,14 +431,37 @@ void CL_SetHTTPServer (const char *URL)
 	if (multi)
 		Com_Error (ERR_DROP, "CL_SetHTTPServer: Still have old handle");
 
-	multi = curl_multi_init ();
-	
+	multi = NULL;
 	memset (&cls.downloadQueue, 0, sizeof(cls.downloadQueue));
 
 	abortDownloads = HTTPDL_ABORT_NONE;
 	handleCount = pendingCount = 0;
+	cls.downloadServer[0] = 0;
 
-	strncpy (cls.downloadServer, URL, sizeof(cls.downloadServer)-1);
+	if (httpDown || !URL || !URL[0] || !cl_http_downloads->intvalue)
+		return;
+
+	if (strncmp (URL, "http://", 7) && strncmp (URL, "https://", 8))
+	{
+		Com_Printf ("Ignoring download server URL with non-HTTP schema.\n", LOG_CLIENT | LOG_WARNING);
+		return;
+	}
+
+	urlLen = strlen (URL);
+	if (urlLen >= sizeof(cls.downloadServer))
+	{
+		Com_Printf ("Ignoring oversize download server URL.\n", LOG_CLIENT | LOG_WARNING);
+		return;
+	}
+
+	multi = curl_multi_init ();
+	if (!multi)
+	{
+		Com_Printf ("curl_multi_init failed; HTTP downloading disabled.\n", LOG_CLIENT | LOG_WARNING);
+		return;
+	}
+
+	memcpy (cls.downloadServer, URL, urlLen + 1);
 }
 /*
 ===============
@@ -426,12 +508,17 @@ false will cause standard UDP downloading to be used instead.
 */
 qboolean CL_QueueHTTPDownload (const char *quakePath)
 {
-	size_t		len;
+	int			len;
 	dlqueue_t	*q;
 	qboolean	needList;
+	char		listPath[MAX_QPATH];
 
 	// no http server (or we got booted)
 	if (!cls.downloadServer[0] || abortDownloads || !cl_http_downloads->intvalue)
+		return false;
+
+	len = strlen (quakePath);
+	if (len < 1 || len >= MAX_QPATH)
 		return false;
 
 	needList = false;
@@ -461,7 +548,9 @@ qboolean CL_QueueHTTPDownload (const char *quakePath)
 	if (needList)
 	{
 		//grab the filelist
-		CL_QueueHTTPDownload (va("%s.filelist", cl.gamedir));
+		len = snprintf (listPath, sizeof(listPath), "%s.filelist", CL_HTTPGamedir());
+		if (len >= 0 && len < (int)sizeof(listPath))
+			CL_QueueHTTPDownload (listPath);
 
 		//this is a nasty hack to let the server know what we're doing so admins don't
 		//get confused by a ton of people stuck in CNCT state. it's assumed the server
@@ -476,15 +565,9 @@ qboolean CL_QueueHTTPDownload (const char *quakePath)
 	len = strlen (quakePath);
 	if (cl_http_filelists->intvalue && len > 4 && !Q_stricmp (quakePath + len - 4, ".bsp"))
 	{
-		char	listPath[MAX_OSPATH];
-		char	filePath[MAX_OSPATH];
-
-		Com_sprintf (filePath, sizeof(filePath), "%s/%s", cl.gamedir, quakePath);
-
-		COM_StripExtension (filePath, listPath);
-		strcat (listPath, ".filelist");
-		
-		CL_QueueHTTPDownload (listPath);
+		len = snprintf (listPath, sizeof(listPath), "%s/%.*s.filelist", CL_HTTPGamedir(), len - 4, quakePath);
+		if (len >= 0 && len < (int)sizeof(listPath))
+			CL_QueueHTTPDownload (listPath);
 	}
 
 	//if a download entry has made it this far, CL_FinishHTTPDownload is guaranteed to be called.
@@ -665,8 +748,15 @@ static void CL_ParseFileList (dlhandle_t *dl)
 	char	 *list;
 	char	*p;
 
-	if (!cl_http_filelists->intvalue)
+	if (!dl->tempBuffer)
 		return;
+
+	if (!cl_http_filelists->intvalue)
+	{
+		Z_Free (dl->tempBuffer);
+		dl->tempBuffer = NULL;
+		return;
+	}
 
 	list = dl->tempBuffer;
 
@@ -791,11 +881,11 @@ static void CL_FinishHTTPDownload (void)
 	int			msgs_in_queue;
 	CURLMsg		*msg;
 	CURLcode	result;
-	dlhandle_t	*dl;
+	dlhandle_t	*dl = NULL;
 	CURL		*curl;
 	long		responseCode;
 	double		timeTaken;
-	double		fileSize;
+	curl_off_t	fileSize;
 	char		tempName[MAX_OSPATH];
 	qboolean	isFile;
 
@@ -828,7 +918,10 @@ static void CL_FinishHTTPDownload (void)
 		}
 
 		if (i == 4)
+		{
 			Com_Error (ERR_DROP, "CL_FinishHTTPDownload: Handle not found");
+			continue;
+		}
 
 		//we mark everything as done even if it errored to prevent multiple
 		//attempts.
@@ -866,13 +959,13 @@ static void CL_FinishHTTPDownload (void)
 				if (responseCode == 404)
 				{
 					i = strlen (dl->queueEntry->quakePath);
-					if (!strcmp (dl->queueEntry->quakePath + i - 4, ".pak"))
+					if (i >= 4 && !strcmp (dl->queueEntry->quakePath + i - 4, ".pak"))
 						downloading_pak = false;
 
 					if (isFile)
 						remove (dl->filePath);
 					Com_Printf ("HTTP(%s): 404 File Not Found [%d remaining files]\n", LOG_CLIENT, dl->queueEntry->quakePath, pendingCount);
-					curl_easy_getinfo (curl, CURLINFO_SIZE_DOWNLOAD, &fileSize);
+					curl_easy_getinfo (curl, CURLINFO_SIZE_DOWNLOAD_T, &fileSize);
 					if (fileSize > 512)
 					{
 						//ick
@@ -894,7 +987,7 @@ static void CL_FinishHTTPDownload (void)
 				}
 
 				//every other code is treated as fatal, fallthrough here
-				Com_Printf ("Bad HTTP response code %d for %s, aborting HTTP downloading.\n", LOG_CLIENT, responseCode, dl->queueEntry->quakePath);
+				Com_Printf ("Bad HTTP response code %ld for %s, aborting HTTP downloading.\n", LOG_CLIENT, responseCode, dl->queueEntry->quakePath);
 
 			//fatal error, disable http
 			case CURLE_COULDNT_RESOLVE_HOST:
@@ -910,7 +1003,7 @@ static void CL_FinishHTTPDownload (void)
 				continue;
 			default:
 				i = strlen (dl->queueEntry->quakePath);
-				if (!strcmp (dl->queueEntry->quakePath + i - 4, ".pak"))
+				if (i >= 4 && !strcmp (dl->queueEntry->quakePath + i - 4, ".pak"))
 					downloading_pak = false;
 				if (isFile)
 					remove (dl->filePath);
@@ -940,7 +1033,7 @@ static void CL_FinishHTTPDownload (void)
 
 		//show some stats
 		curl_easy_getinfo (curl, CURLINFO_TOTAL_TIME, &timeTaken);
-		curl_easy_getinfo (curl, CURLINFO_SIZE_DOWNLOAD, &fileSize);
+		curl_easy_getinfo (curl, CURLINFO_SIZE_DOWNLOAD_T, &fileSize);
 
 		//FIXME:
 		//technically i shouldn't need to do this as curl will auto reuse the
@@ -949,7 +1042,7 @@ static void CL_FinishHTTPDownload (void)
 		//out why, please let me know.
 		curl_multi_remove_handle (multi, dl->curl);
 
-		Com_Printf ("HTTP(%s): %.f bytes, %.2fkB/sec [%d remaining files]\n", LOG_CLIENT, dl->queueEntry->quakePath, fileSize, (fileSize / 1024.0) / timeTaken, pendingCount);
+		Com_Printf ("HTTP(%s): %.f bytes, %.2fkB/sec [%d remaining files]\n", LOG_CLIENT, dl->queueEntry->quakePath, (double)fileSize, timeTaken > 0.0 ? ((double)fileSize / 1024.0) / timeTaken : 0.0, pendingCount);
 	} while (msgs_in_queue > 0);
 
 	FS_FlushCache ();
@@ -1020,7 +1113,7 @@ static void CL_StartNextHTTPDownload (void)
 
 			//ugly hack for pak file single downloading
 			len = strlen (q->quakePath);
-			if (len > 4 && !Q_stricmp (q->quakePath + len - 4, ".pak"))
+			if (q->state == DLQ_STATE_RUNNING && len > 4 && !Q_stricmp (q->quakePath + len - 4, ".pak"))
 				downloading_pak = true;
 
 			break;

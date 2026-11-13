@@ -333,7 +333,7 @@ void EXPORT SV_LinkEdict (edict_t *ent)
 			if (k>65535)	//2 bytes enough precision? :D
 				k = 65535;
 
-			svs.entities[edict_number].solid2 = (k<<16) | (j<<8) | i;
+			svs.entities[edict_number].solid2 = (int32)(((uint32)k<<16) | (j<<8) | i);
 		}
 	}
 	else if (ent->solid == SOLID_BSP)

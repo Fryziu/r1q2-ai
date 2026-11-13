@@ -1050,10 +1050,10 @@ int MSG_ReadLong (sizebuf_t *msg_read)
 	if (msg_read->readcount+4 > msg_read->cursize)
 		c = -1;
 	else
-		c = msg_read->data[msg_read->readcount]
-		+ (msg_read->data[msg_read->readcount+1]<<8)
-		+ (msg_read->data[msg_read->readcount+2]<<16)
-		+ (msg_read->data[msg_read->readcount+3]<<24);
+		c = (int32)((uint32)msg_read->data[msg_read->readcount]
+		| ((uint32)msg_read->data[msg_read->readcount+1]<<8)
+		| ((uint32)msg_read->data[msg_read->readcount+2]<<16)
+		| ((uint32)msg_read->data[msg_read->readcount+3]<<24));
 	
 	msg_read->readcount += 4;
 	
@@ -1872,6 +1872,8 @@ RESTRICT void * EXPORT Z_TagMallocRelease (int size, int tag)
 	return (void *)(z+1);
 }
 
+static const uint32 z_game_magic = 0xFDFEFDFE;
+
 RESTRICT void * EXPORT Z_TagMallocGame (int size, int tag)
 {
 	z_memloc_t	*loc, *last, *newentry;
@@ -1908,7 +1910,7 @@ RESTRICT void * EXPORT Z_TagMallocGame (int size, int tag)
 	b = Z_TagMalloc (size+4, tag);
 
 	memset (b, 0, size);
-	*(int *)(b + size) = 0xFDFEFDFE;
+	memcpy (b + size, &z_game_magic, sizeof(z_game_magic));
 
 	if (tag == TAG_LEVEL)
 		z_level_allocs++;
@@ -1953,7 +1955,7 @@ void EXPORT Z_FreeGame (void *buf)
 		loc = loc->next;
 		if (buf == loc->address)
 		{
-			if (*(int *)((byte *)buf + loc->size) != 0xFDFEFDFE)
+			if (memcmp ((byte *)buf + loc->size, &z_game_magic, sizeof(z_game_magic)))
 			{
 				Com_Printf ("Memory corruption detected within the Game DLL. Please contact the mod author and inform them that they are not managing dynamically allocated memory correctly.\n", LOG_GENERAL);
 				Com_Error (ERR_DIE, "Z_FreeGame: Game DLL corrupted a memory block of size %d at %p (allocated %u ms ago from code at %p), detected during free at %p", loc->size, loc->address, curtime - loc->time, loc->allocationLocation, retAddr);
@@ -1992,7 +1994,7 @@ void EXPORT Z_FreeTagsGame (int tag)
 	{
 		loc = loc->next;
 
-		if (*(int *)((byte *)loc->address + loc->size) != 0xFDFEFDFE)
+		if (memcmp ((byte *)loc->address + loc->size, &z_game_magic, sizeof(z_game_magic)))
 		{
 			Com_Printf ("Memory corruption detected within the Game DLL. Please contact the mod author and inform them that they are not managing dynamically allocated memory correctly.\n", LOG_GENERAL);
 			Com_Error (ERR_DIE, "Z_FreeTagsGame: Game DLL corrupted a memory block of size %d at %p (allocated %u ms ago from code at %p)", loc->size, loc->address, curtime - loc->time, loc->allocationLocation);
@@ -2383,8 +2385,8 @@ void Qcommon_Init (int argc, char **argv)
 #endif
 
 	Com_Printf ("====== Quake2 Initialized ======\n", LOG_GENERAL);	
-	Com_Printf ("R1Q2 build " BUILD ", compiled " __DATE__ ".\n"
-				"http://www.r1ch.net/stuff/r1q2/\n"
+	Com_Printf ("R1Q2-AI build " BUILD ", compiled " __DATE__ ".\n"
+				"https://github.com/Fryziu/r1q2-ai\n"
 				BUILDSTRING " " CPUSTRING " (%s)\n\n", LOG_GENERAL, binary_name);
 
 #ifndef DEDICATED_ONLY
@@ -2408,10 +2410,10 @@ void Qcommon_Init (int argc, char **argv)
 				"\n"
 				"  Press <ESC> to open the menu.\n"
 				"  Type connect <host> to connect to a server.\n"
-				"  View the readme at http://www.r1ch.net/forum/index.php?board=8.0\n"
+				"  View the readme at https://github.com/Fryziu/r1q2-ai\n"
 				"\n", LOG_GENERAL);
 
-			Sys_UpdateURLMenu ("http://www.r1ch.net/forum/index.php?board=8.0");
+			Sys_UpdateURLMenu ("https://github.com/Fryziu/r1q2-ai");
 #endif
 
 #ifndef NO_SERVER

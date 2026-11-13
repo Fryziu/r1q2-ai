@@ -1,6 +1,6 @@
 # Instrukcje dla agentów — R1Q2 Linux
 
-Przed rozpoczęciem pracy przeczytaj `NEXT_SESSION_PROMPT.md` oraz `PORTING_LINUX.md`. Pierwszy plik jest krótkim briefem dla nowej sesji, a drugi zawiera pełną historię zmian, wyniki testów, znane problemy i plan kolejnych etapów. Po każdym etapie zaktualizuj dokumentację.
+Przed rozpoczęciem pracy przeczytaj `NEXT_SESSION_PROMPT.md` oraz `PORTING_LINUX.md`. Pierwszy plik jest krótkim briefem dla nowej sesji, a drugi zawiera pełną historię zmian, wyniki testów, znane problemy i plan kolejnych etapów. Po każdym etapie zaktualizuj dokumentację. `EFFORT_REPORT.md` zawiera natomiast zbiorczy raport zakresu i dane do symulacji nakładu pracy bez AI.
 
 ## Projekt
 
@@ -10,21 +10,37 @@ Przed rozpoczęciem pracy przeczytaj `NEXT_SESSION_PROMPT.md` oraz `PORTING_LINU
 - Minimalna i domyślna rozdzielczość to 800x600. Menu obsługuje także presety do 3840x2160, tryb pulpitu i custom.
 - `vid_fullscreen`: 0=okno, 1=exclusive, 2=fullscreen desktop. `vid_display` wybiera monitor SDL, `gl_mode -1` używa `vid_width`/`vid_height`, a `gl_mode -2` natywnej rozdzielczości wybranego monitora. Okno jest ograniczane do usable bounds, a drawable do High DPI.
 - Audio SDL2 jest zaimplementowane i zaakceptowane przez użytkownika (`linux/snd_sdl2.c`, 16-bit stereo, ring buffer i callback SDL). Domyślne jest `s_initsound 1`; można je wyłączyć przez `s_initsound 0`. Stary OSS `linux/snd_linux.c` nie jest kompilowany.
+- Pobieranie HTTP jest aktywne przez `client/cl_http.c` i libcurl (`USE_CURL`, pakiet `libcurl4-openssl-dev`). Domyślne jest `cl_http_downloads 1`; wartość 0 oraz błędny `dlserver` zachowują fallback UDP. Zdalny URL używa katalogu moda z `CL_HTTPGamedir`, a lokalny zapis `FS_Gamedir()` — nie wolno używać lokalnej ścieżki w URL.
 - Mysz jest przechwytywana w trakcie rozgrywki fullscreen; w oknie wymaga `_windowed_mouse 1`. Menu i konsola zwalniają grab i pokazują kursor. `IN_Frame` w `linux/vid_so.c` steruje tym na podstawie `cl.refresh_prepped` i `cls.key_dest` — nie usuwaj tej logiki.
 - Oryginalne zasoby znajdują się w `/home/user/.quake2`, ale nie wolno ich modyfikować ani instalować tam plików bez wyraźnej prośby użytkownika.
 - Jeżeli istnieje `reference/quake2idsoftware/`, używaj go wyłącznie jako źródła porównawczego. Nie dołączaj go do buildu, nie nadpisuj nim plików R1Q2 i nie przenoś zmian mechanicznie bez analizy różnic.
 
 ## Budowanie
 
+Z katalogu głównego:
+
 ```sh
-make -C binaries -j"$(nproc)"
+make -j"$(nproc)"
 ```
 
 Pełna rekompilacja:
 
 ```sh
-make -C binaries distclean
-make -C binaries -j"$(nproc)"
+make distclean
+make -j"$(nproc)"
+```
+
+Wariant bez HTTP:
+
+```sh
+make distclean
+make -j"$(nproc)" USE_CURL=0
+```
+
+Osobny build ASan/UBSan w `/tmp/opencode/r1q2-sanitize`:
+
+```sh
+make -j"$(nproc)" sanitize
 ```
 
 Artefakty: `binaries/client/quake2`, `binaries/r1q2ded/r1q2ded`, `binaries/game/gamex86_64.so`, `binaries/ref_gl/ref_gl.so`.

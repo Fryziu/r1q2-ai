@@ -187,7 +187,8 @@ typedef enum {false, true}	qboolean;
 
 
 #define	frand()		(random())
-#define	crand()		(((int)randomMT() - 0x7FFFFFFF) * 0.000000000465661287307739257812f)
+/* Preserve the historical modulo-2^32 mapping without signed overflow. */
+#define	crand()		(((int32)(randomMT() - 0x7FFFFFFFU)) * 0.000000000465661287307739257812f)
 
 #ifndef NULL
 #define NULL ((void *)0)

@@ -1,1 +1,1 @@
-#define BUILD "8012"
+#define BUILD "2026-11-13_KIMI_K3.1_Pro"

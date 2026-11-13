@@ -742,7 +742,7 @@ dynamic:
 		unsigned	temp[128*128];
 		int			smax, tmax;
 
-		if ( ( surf->styles[map] >= 32 || surf->styles[map] == 0 ) && ( surf->dlightframe != r_framecount ) )
+		if ( map < MAXLIGHTMAPS && ( surf->styles[map] >= 32 || surf->styles[map] == 0 ) && ( surf->dlightframe != r_framecount ) )
 		{
 			smax = (surf->extents[0]>>4)+1;
 			tmax = (surf->extents[1]>>4)+1;

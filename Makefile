@@ -1,4 +1,5 @@
-all:
-	@echo The R1Q2 build process has changed. Please use the
-	@echo new Makefile in the binaries directory to build R1Q2.
+.PHONY: all client game ref_gl r1q2ded clean distclean combine sanitize help
+
+all client game ref_gl r1q2ded clean distclean combine sanitize help:
+	$(MAKE) -C binaries $@
 

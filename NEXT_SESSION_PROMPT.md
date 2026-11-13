@@ -10,7 +10,7 @@ Pracujesz z repozytorium `/home/user/git/r1q2-tsmod`, zawierającym stary kod R1
 
 Wszystkie dotychczasowe poprawki znajdują się w drzewie roboczym i **nie zostały zacommitowane**. Nie wykonuj `git reset`, `git clean`, `git checkout --`, `git restore` ani innych operacji mogących usunąć lub nadpisać zmiany. Nie wykonuj commitów, pushów ani innych mutacji Git bez wyraźnej zgody użytkownika.
 
-Nowe pliki, m.in. `linux/gl_sdl2.c`, `linux/snd_sdl2.c`, `AGENTS.md`, `PORTING_LINUX.md` i ten brief, są nieśledzone przez Git, tak jak dokumentacja i wygenerowane artefakty kompilacji. Obecność wielu plików `.o` i `.depends` w `git status` jest oczekiwana.
+Nowe pliki, m.in. `linux/gl_sdl2.c`, `linux/snd_sdl2.c`, `.gitignore`, `README.md`, `AGENTS.md`, `PORTING_LINUX.md` i ten brief, są nieśledzone przez Git. Dodany 2026-11-13 `.gitignore` ukrywa wygenerowane `.o`, `.depends`, binarki oraz zewnętrzne drzewa `reference/`; nie ignoruj nowych źródeł produkcyjnych ani dokumentacji.
 
 Oryginalne dane gry są w `/home/user/.quake2`. Nie modyfikuj ich ani nie instaluj tam plików bez wyraźnej prośby. Źródła referencyjne id Software są w `reference/quake2idsoftware/`; traktuj je wyłącznie jako materiał do porównań, nigdy jako kod do nadpisania R1Q2 lub dołączenia do buildu.
 
@@ -68,17 +68,31 @@ Indeksy mogą się zmienić po przełączeniu sprzętu. Fullscreen desktop na ws
 
 Domyślnie: SDL2, OpenGL jako jedyny renderer, minimum 800x600, `s_initsound 1`. Software renderer jest celowo wyłączony.
 
-Build:
+Wymagane pakiety build:
 
 ```sh
-make -C binaries -j"$(nproc)"
+sudo apt install libsdl2-dev libgl1-mesa-dev libglu1-mesa-dev libpng-dev libjpeg-dev zlib1g-dev libcurl4-openssl-dev
+```
+
+Build z katalogu głównego:
+
+```sh
+make -j"$(nproc)"
 ```
 
 Pełna rekompilacja:
 
 ```sh
-make -C binaries distclean
-make -C binaries -j"$(nproc)"
+make distclean
+make -j"$(nproc)"
+```
+
+Wariant bez HTTP i osobny build sanitizerów:
+
+```sh
+make distclean
+make -j"$(nproc)" USE_CURL=0
+make -j"$(nproc)" sanitize
 ```
 
 Artefakty:
@@ -112,7 +126,7 @@ cp binaries/game/gamex86_64.so /home/user/.quake2/baseq2/
 - Ślad blastera nadal ma przerwy. `CL_BlasterTrail` celowo tworzy cząsteczki co 5 jednostek. To kandydat na osobną analizę porównawczą, nie automatyczną zmianę.
 - `couldn't exec r1gl.cfg` oznacza brak opcjonalnego pliku konfiguracyjnego i nie jest błędem krytycznym.
 - `Function offsets ...` jest diagnostyką `ReadLevel()` na systemach innych niż Windows. Może mieć znaczenie przy zgodności savegame między innymi binariami/ASLR, ale obecne save/load działa.
-- Komunikat `HTTP downloading supported by server but this client was built without USE_CURL` wskazuje brak funkcji HTTP, nie regresję SDL2.
+- HTTP jest aktywne (`USE_CURL`). Jeśli `HTTP downloading supported by server but this client was built without USE_CURL` pojawi się ponownie, wykonaj pełny `distclean` + build: Make nie śledzi zmiany `CFLAGS`, więc sam build przyrostowy mógł zostawić stare obiekty.
 - Joystick pozostaje wyłączony. Unicode/IME, SDL_GameController i pełna obsługa urządzeń audio nie zostały zaimplementowane.
 - Istnieją stare ostrzeżenia kompilatora i potencjalne miejsca do ASan/UBSan, ale nie należy robić masowej przebudowy ze względu na nie.
 
@@ -120,10 +134,10 @@ cp binaries/game/gamex86_64.so /home/user/.quake2/baseq2/
 
 Na początku przedstaw użytkownikowi krótką listę i wspólnie wybierzcie jedno zadanie. Nie realizuj wszystkich naraz.
 
-1. Analiza przerywanego śladu blastera: baseline, `cl_async`, point parameters/sprites, generowanie vs rysowanie cząsteczek.
-2. Pobieranie HTTP przez libcurl jako osobny etap, z testami bez zmiany protokołu i zachowaniem fallbacku.
-3. Dopracowanie HUD/UI dla 1440p/4K i skalowania interfejsu (`gl_hudscale` już istnieje).
-4. Wybrane poprawki poprawności z ASan/UBSan oraz powtarzalne testy restartów i map.
+1. Etap poprawności i ASan/UBSan z 2026-11-13 jest zakończony i zaakceptowany przez użytkownika. Nie powtarzaj go automatycznie; szczegóły poprawek i logi są w `PORTING_LINUX.md`.
+2. Etap HTTP/libcurl jest zakończony technicznie wraz z obsługą dużych obrazów: testy lokalne, ASan/UBSan, fallback UDP i `r_notexture`, pobranie mapy oraz wejście z `makuta.pcx` na zewnętrznym serwerze przeszły. Oczekiwana akceptacja użytkownika. Ścieżki są zgodne z Q2Pro; zachowano kontrakty R1Q2.
+3. Etap porządkowania Makefile’ów i przygotowania `README.md` jest zakończony technicznie. Główny build działa przez `make`, dostępne są `USE_CURL=0`, `make sanitize` i `make help`. Następny wybór po akceptacji: analiza przerywanego śladu blastera (baseline, `cl_async`, point parameters/sprites, generowanie vs rysowanie cząsteczek).
+4. Osobny etap UI: skalowanie HUD dla 1440p/4K (`gl_hudscale` już istnieje) oraz niezależne skalowanie crosshair względem HUD. Zachować obecny wygląd jako ustawienie domyślne; nazwę cvaru i zakres skali ustalić po analizie ścieżki rysowania.
 5. Dodatkowe funkcje wejścia, joystick/controller, IME lub urządzeń audio — każde osobno.
 6. Dalsze detale wideo: odświeżanie, fullscreen edge cases, przenoszenie okna między monitorami i testy XFCE.
 7. Optymalizacja dopiero po profilowaniu; bez przepisywania renderera dla samej nowoczesności.
@@ -134,4 +148,4 @@ Przed zmianą kodu przedstaw krótki plan wybranego zadania. Zachowaj obecny dzi
 
 ## Skrócona wersja promptu, jeśli potrzebna
 
-Kontynuuj pracę w `/home/user/git/r1q2-tsmod` na działającym porcie R1Q2 dla Linux Mint x86_64. Najpierw przeczytaj `AGENTS.md`, `NEXT_SESSION_PROMPT.md` i `PORTING_LINUX.md`. Wszystkie poprawki są niezacommitowane — nie używaj `git reset`, `git clean` ani operacji kasujących zmiany. SDL2 video/audio, singleplayer, multiplayer, save/load i trzy monitory do 4K są już potwierdzone. Zachowaj małe etapy, OpenGL compatibility, konfigurowalne `newgame`, oryginalne hacki i test po każdej zmianie. Nie modyfikuj `/home/user/.quake2` bez prośby, a `reference/quake2idsoftware/` traktuj tylko jako referencję. Na początku zaproponuj użytkownikowi jeden osobny etap: analiza śladu blastera, libcurl HTTP, HUD 4K, ASan/UBSan albo inna drobna funkcja. Nie rozpoczynaj dużej przebudowy ani masowego czyszczenia ostrzeżeń.
+Kontynuuj pracę w `/home/user/git/r1q2-tsmod` na działającym porcie R1Q2 dla Linux Mint x86_64. Najpierw przeczytaj `AGENTS.md`, `NEXT_SESSION_PROMPT.md` i `PORTING_LINUX.md`. Wszystkie poprawki są niezacommitowane — nie używaj `git reset`, `git clean` ani operacji kasujących zmiany. SDL2 video/audio, singleplayer, multiplayer, save/load i trzy monitory do 4K są już potwierdzone. Zachowaj małe etapy, OpenGL compatibility, konfigurowalne `newgame`, oryginalne hacki i test po każdej zmianie. Nie modyfikuj `/home/user/.quake2` bez prośby, a `reference/quake2idsoftware/` traktuj tylko jako referencję. Na początku zaproponuj użytkownikowi jeden osobny etap: analiza śladu blastera, skalowanie HUD i niezależne skalowanie crosshair albo inna drobna funkcja. Nie rozpoczynaj dużej przebudowy ani masowego czyszczenia ostrzeżeń.

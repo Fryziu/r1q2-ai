@@ -807,7 +807,7 @@ static void CL_DemoDeltaPlayerstate (const frame_t *from, frame_t *to)
 	player_state_t			*ps;
 	const player_state_t	*ops;
 	static player_state_t	dummy = {{0}};
-	int				statbits;
+	uint32			statbits;
 
 	ps = &to->playerstate;
 	if (!from)
@@ -982,10 +982,10 @@ static void CL_DemoDeltaPlayerstate (const frame_t *from, frame_t *to)
 	statbits = 0;
 	for (i=0 ; i<MAX_STATS ; i++)
 		if (ps->stats[i] != ops->stats[i])
-			statbits |= 1<<i;
-	MSG_WriteLong (statbits);
+			statbits |= 1U<<i;
+	MSG_WriteLong ((int32)statbits);
 	for (i=0 ; i<MAX_STATS ; i++)
-		if (statbits & (1<<i) )
+		if (statbits & (1U<<i) )
 			MSG_WriteShort (ps->stats[i]);
 }
 
@@ -999,7 +999,7 @@ static void CL_ParsePlayerstate (const frame_t *oldframe, frame_t *newframe, int
 	int			flags;
 	player_state_t	*state;
 	int			i;
-	int			statbits;
+	uint32		statbits;
 	qboolean	enhanced;
 
 	state = &newframe->playerstate;
@@ -1162,7 +1162,7 @@ static void CL_ParsePlayerstate (const frame_t *oldframe, frame_t *newframe, int
 		if (statbits)
 		{
 			for (i=0 ; i<MAX_STATS ; i++)
-				if (statbits & (1<<i) )
+				if (statbits & (1U<<i) )
 					state->stats[i] = MSG_ReadShort(&net_message);
 		}
 	}

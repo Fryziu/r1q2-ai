@@ -1,5 +1,13 @@
 VPATH=../../game ../../linux ../../qcommon ../../server ../../client	
 
+PKG_CONFIG ?= pkg-config
+SDL2_CONFIG ?= sdl2-config
+USE_CURL ?= 1
+
+ifneq ($(filter $(USE_CURL),0 1),$(USE_CURL))
+$(error USE_CURL must be 0 or 1)
+endif
+
 quake2_SRC:=cl_cin.c cl_ents.c cl_fx.c cl_input.c cl_inv.c cl_main.c\
 	    cl_parse.c cl_pred.c cl_tent.c cl_scrn.c cl_view.c cl_newfx.c\
 	    console.c keys.c menu.c snd_dma.c snd_mem.c snd_mix.c qmenu.c\
@@ -12,7 +20,15 @@ quake2_SRC:=cl_cin.c cl_ents.c cl_fx.c cl_input.c cl_inv.c cl_main.c\
 	    le_physics.c redblack.c cd_linux.c snd_sdl2.c unzip.c ioapi.c
 #	    al_linux.c qal_linux.c
 
-CFLAGS+=$(shell sdl2-config --cflags)
+# Run distclean after changing USE_CURL.
+ifeq ($(USE_CURL),1)
+quake2_SRC += cl_http.c
+CURL_CFLAGS = $(shell $(PKG_CONFIG) --cflags libcurl) -DUSE_CURL
+CURL_LIBS = $(shell $(PKG_CONFIG) --libs libcurl)
+CFLAGS += $(CURL_CFLAGS)
+endif
+
+CFLAGS+=$(shell $(SDL2_CONFIG) --cflags)
 
 #CFLAGS+=-DUSE_OPENAL
 quake2_OBJ:=$(quake2_SRC:.c=.o)
@@ -26,7 +42,7 @@ TARGETS:=quake2 quake2-combine
 
 include ../make.inc
 
-LDFLAGS+=$(shell sdl2-config --libs) -lm -lz
+LDFLAGS+=$(shell $(SDL2_CONFIG) --libs) $(CURL_LIBS) -lm -lz
 
 ifeq ($(shell uname),Linux)
 LDFLAGS+=-ldl
@@ -40,9 +56,7 @@ endif
 quake2: $(quake2_OBJ)
 	$(CC) -g -o $@ $^ $(LDFLAGS)
 
-# only works with gcc >4.1
+# Legacy GCC --combine target; not used by the normal build.
 combine: quake2-combine
 quake2-combine: $(quake2_SRC)
-	$(CC) $(shell sdl2-config --cflags) -O2 -ffloat-store -DNDEBUG -DLINUX -fwhole-program --combine -g -o $@ $^ $(LDFLAGS)
-
--include .depends/*.d
+	$(CC) $(shell $(SDL2_CONFIG) --cflags) $(CURL_CFLAGS) -O2 -ffloat-store -DNDEBUG -DLINUX -fwhole-program --combine -g -o $@ $^ $(LDFLAGS)

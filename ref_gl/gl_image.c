@@ -2749,14 +2749,23 @@ static qboolean IsPowerOf2( int value )
 
 qboolean GL_Upload8 (byte *data, int width, int height,  qboolean mipmap, image_t *image)
 {
-	unsigned	trans[512*256];
-	int			i, s;
+	unsigned	small_trans[512*256];
+	unsigned	*trans = small_trans;
+	size_t		i, s;
 	int			p;
+	qboolean	result;
 
-	s = width*height;
+	s = (size_t)width * (size_t)height;
 
-	if (s > sizeof(trans)/4)
-		ri.Sys_Error (ERR_DROP, "GL_Upload8: %s: %dx%d too large", current_texture_filename, width, height);
+	if (s > MAX_IMAGE_SOURCE_DIMENSION * MAX_IMAGE_SOURCE_DIMENSION)
+		ri.Sys_Error (ERR_DROP, "GL_Upload8: %s: %dx%d exceeds source limits", current_texture_filename, width, height);
+
+	if (s > sizeof(small_trans)/sizeof(small_trans[0]))
+	{
+		trans = malloc (s * sizeof(*trans));
+		if (!trans)
+			ri.Sys_Error (ERR_DROP, "GL_Upload8: %s: out of memory", current_texture_filename);
+	}
 
 	for (i=0 ; i<s ; i++)
 	{
@@ -2784,7 +2793,11 @@ qboolean GL_Upload8 (byte *data, int width, int height,  qboolean mipmap, image_
 		}
 	}
 
-	return GL_Upload32 (trans, width, height, mipmap, 8, image);
+	result = GL_Upload32 (trans, width, height, mipmap, 8, image);
+	if (trans != small_trans)
+		free (trans);
+
+	return result;
 }
 
 
@@ -2800,6 +2813,13 @@ image_t *GL_LoadPic (const char *name, byte *pic, int width, int height, imagety
 	qboolean	mipmap;
 	image_t		*image;
 	int			i;
+
+	if (bits == 8 && (width <= 0 || height <= 0 ||
+		(size_t)width * (size_t)height > MAX_IMAGE_SOURCE_DIMENSION * MAX_IMAGE_SOURCE_DIMENSION))
+	{
+		ri.Con_Printf (PRINT_ALL, "GL_LoadPic: %s: %dx%d exceeds source limits, using r_notexture\n", name, width, height);
+		return r_notexture;
+	}
 
 	// find a free image_t
 	for (i=0, image=gltextures ; i<numgltextures ; i++,image++)
@@ -3089,7 +3109,7 @@ image_t	*GL_FindImage (const char *name, const char *basename, imagetype_t type)
 			//png_name[len-3] = 't';
 			//png_name[len-2] = 'g';
 			//png_name[len-1] = 'a';
-			*(int *)(png_name + (len-3)) = '\0agt';
+			memcpy (png_name + (len-3), "tga", 4);
 			current_texture_filename = png_name;
 			LoadTGA (png_name, &pic, &width, &height);
 		}
@@ -3100,7 +3120,7 @@ image_t	*GL_FindImage (const char *name, const char *basename, imagetype_t type)
 				//png_name[len-3] = 'p';
 				//png_name[len-2] = 'n';
 				//png_name[len-1] = 'g';
-				*(int *)(png_name + (len-3)) = '\0gnp';
+				memcpy (png_name + (len-3), "png", 4);
 				LoadPNG (png_name, &pic, &width, &height);
 			}
 			if (!pic)
@@ -3109,7 +3129,7 @@ image_t	*GL_FindImage (const char *name, const char *basename, imagetype_t type)
 				{
 					//png_name[len-3] = 'j';
 					//png_name[len-2] = 'p';
-					*(int *)(png_name + (len-3)) = '\0gpj';
+					memcpy (png_name + (len-3), "jpg", 4);
 					LoadJPG (png_name, &pic, &width, &height);
 				}
 				if (!pic)
@@ -3375,7 +3395,7 @@ int Draw_GetPalette (void)
 		g = pal[i*3+1];
 		b = pal[i*3+2];
 		
-		v = (255<<24) + (r<<0) + (g<<8) + (b<<16);
+		v = (255U<<24) + (r<<0) + (g<<8) + (b<<16);
 		d_8to24table[i] = LittleLong(v);
 
 		d_8to24float[i][0] = r / 255.0f;

@@ -94,7 +94,7 @@ void ResampleSfx (sfx_t *sfx, int inrate, int inwidth, byte *data)
 			if (inwidth == 2)
 				sample = LittleShort ( ((int16 *)data)[srcsample] );
 			else
-				sample = (int32)( (unsigned char)(data[srcsample]) - 128) << 8;
+				sample = ((int32)(unsigned char)(data[srcsample]) - 128) * 256;
 			if (sc->width == 2)
 				((int16 *)sc->data)[i] = sample;
 			else

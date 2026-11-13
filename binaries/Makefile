@@ -1,4 +1,8 @@
-.PHONY: default all r1q2ded game client ref_gl clean distclean combine
+SANITIZE_DIR ?= /tmp/opencode/r1q2-sanitize
+SANITIZE_CC ?= gcc
+SANITIZE_FLAGS ?= -fsanitize=address,undefined -fno-omit-frame-pointer
+
+.PHONY: default all r1q2ded game client ref_gl clean distclean combine sanitize help
 
 default: all
 
@@ -33,3 +37,25 @@ combine:
 	$(MAKE) -C client combine
 	$(MAKE) -C game combine
 	$(MAKE) -C ref_gl combine
+
+sanitize:
+	@set -eu; \
+	src="$(abspath ..)"; dst="$(SANITIZE_DIR)"; \
+	case "$$dst" in /tmp/opencode/*) ;; *) \
+		echo "SANITIZE_DIR must be under /tmp/opencode"; exit 1 ;; \
+	esac; \
+	mkdir -p "$$dst"; \
+	cp -a "$$src/binaries" "$$src/client" "$$src/game" "$$src/linux" \
+		"$$src/qcommon" "$$src/ref_gl" "$$src/server" "$$src/build.h" "$$dst/"; \
+	$(MAKE) -C "$$dst/binaries" distclean; \
+	$(MAKE) -C "$$dst/binaries" CC="$(SANITIZE_CC) $(SANITIZE_FLAGS)"; \
+	printf 'Sanitizer build complete: %s\n' "$$dst"
+
+help:
+	@printf '%s\n' \
+		'make [all]             Build client, dedicated server, game and renderer' \
+		'make clean             Remove objects and binaries' \
+		'make distclean         Also remove generated dependencies' \
+		'make sanitize          Build ASan/UBSan in /tmp/opencode' \
+		'make USE_CURL=0        Build without HTTP/libcurl (run distclean first)' \
+		'make help              Show this help'

@@ -1,7 +1,10 @@
 CFLAGS+=-DNDEBUG -DLINUX -O2 -fno-strict-aliasing -Wall -ffloat-store -pipe -g -MF .depends/$*.d -MMD
 ALLOBJ:=$(ALLSRC:.c=.o)
 
+.DELETE_ON_ERROR:
+
 $(ALLOBJ): | .depends
+$(ALLOBJ): Makefile ../make.inc
 
 .depends:
 	mkdir -p $@
@@ -9,7 +12,7 @@ $(ALLOBJ): | .depends
 .PHONY: clean distclean
 
 clean:
-	-rm -f $(ALLOBJ) $(TARGETS)
+	-rm -f *.o $(TARGETS)
 
 DEPENDS=$(foreach file, $(ALLSRC:.c=.d), .depends/$(file))
 

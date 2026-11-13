@@ -472,7 +472,7 @@ static int SV_WritePlayerstateToClient (const client_frame_t /*@null@*/*from, cl
 	int							i;
 	int							pflags;
 	static player_state_t		null_playerstate;
-	int							statbits;
+	uint32						statbits;
 	int							extraflags;
 	qboolean					enhanced;
 	player_state_t			*ps;
@@ -959,16 +959,16 @@ static int SV_WritePlayerstateToClient (const client_frame_t /*@null@*/*from, cl
 	statbits = 0;
 	for (i=0 ; i<MAX_STATS ; i++)
 		if (ps->stats[i] != ops->stats[i])
-			statbits |= 1<<i;
+			statbits |= 1U<<i;
 
 	if (!enhanced || statbits)
 		extraflags |= EPS_STATS;
 
 	if (extraflags & EPS_STATS)
 	{
-		MSG_WriteLong (statbits);
+		MSG_WriteLong ((int32)statbits);
 		for (i=0 ; i<MAX_STATS ; i++)
-			if (statbits & (1<<i) )
+			if (statbits & (1U<<i) )
 				MSG_WriteShort (ps->stats[i]);
 	}
 #ifndef NPROFILE

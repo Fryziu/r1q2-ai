@@ -37,5 +37,3 @@ r1q2ded-combine: $(r1q2ded_SRC)
 TARGETS:=r1q2ded r1q2ded-combine
 
 include ../make.inc
-
--include .depends/*.d
