@@ -671,7 +671,8 @@ void VID_ReloadRefresh (void);
 //
 // cl_main
 //
-extern	refexport_t	re;		// interface to refresh .dll
+extern	refexport_t		re;		// interface to refresh .dll
+extern	DrawCrosshair_t	re_DrawCrosshair;
 
 void CL_Init (void);
 

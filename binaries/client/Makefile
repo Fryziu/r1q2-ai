@@ -18,7 +18,6 @@ quake2_SRC:=cl_cin.c cl_ents.c cl_fx.c cl_input.c cl_inv.c cl_main.c\
 	    q_shlinux.c vid_menu.c vid_so.c sys_linux.c glob.c net_udp.c\
 	    q_shared.c pmove.c mersennetwister.c le_util.c\
 	    le_physics.c redblack.c cd_linux.c snd_sdl2.c unzip.c ioapi.c
-#	    al_linux.c qal_linux.c
 
 # Run distclean after changing USE_CURL.
 ifeq ($(USE_CURL),1)
@@ -30,15 +29,14 @@ endif
 
 CFLAGS+=$(shell $(SDL2_CONFIG) --cflags)
 
-#CFLAGS+=-DUSE_OPENAL
 quake2_OBJ:=$(quake2_SRC:.c=.o)
 ALLSRC:=$(quake2_SRC)
 
-.PHONY: default combine
+.PHONY: default
 
 default: quake2
 
-TARGETS:=quake2 quake2-combine
+TARGETS:=quake2
 
 include ../make.inc
 
@@ -55,8 +53,3 @@ endif
 
 quake2: $(quake2_OBJ)
 	$(CC) -g -o $@ $^ $(LDFLAGS)
-
-# Legacy GCC --combine target; not used by the normal build.
-combine: quake2-combine
-quake2-combine: $(quake2_SRC)
-	$(CC) $(shell $(SDL2_CONFIG) --cflags) $(CURL_CFLAGS) -O2 -ffloat-store -DNDEBUG -DLINUX -fwhole-program --combine -g -o $@ $^ $(LDFLAGS)

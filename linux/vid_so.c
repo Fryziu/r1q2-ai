@@ -18,7 +18,8 @@
 qboolean reload_video = false;
 
 // Structure containing functions exported from refresh DLL
-refexport_t	re;
+refexport_t		re;
+DrawCrosshair_t	re_DrawCrosshair;
 
 // Console variables that we need to access from this module
 cvar_t		*vid_gamma;
@@ -205,6 +206,8 @@ void VID_NewWindow ( int width, int height)
 {
 	viddef.width  = width;
 	viddef.height = height;
+
+	cl.force_refdef = true;		// can't use a paused refdef
 }
 
 void VID_FreeReflib (void)
@@ -228,6 +231,7 @@ void VID_FreeReflib (void)
 	RW_IN_Frame_fp = NULL;
 
 	memset (&re, 0, sizeof(re));
+	re_DrawCrosshair = NULL;
 	reflib_library = NULL;
 	reflib_active  = false;
 }
@@ -342,6 +346,7 @@ qboolean VID_LoadRefresh( char *name )
 	}
 
 	re = GetRefAPI( ri );
+	re_DrawCrosshair = (DrawCrosshair_t) dlsym( reflib_library, "Draw_Crosshair" );
 
 	if (re.api_version != API_VERSION)
 	{

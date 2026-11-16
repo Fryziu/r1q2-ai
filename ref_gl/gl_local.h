@@ -239,6 +239,8 @@ extern cvar_t	*gl_zfar;
 extern cvar_t	*gl_overbrights;
 extern cvar_t	*gl_linear_mipmaps;
 extern cvar_t	*gl_hudscale;
+extern float	r_hudscale_x, r_hudscale_y;
+extern double	vid_scaled_width, vid_scaled_height;
 
 extern cvar_t	*vid_gamma_pics;
 
@@ -385,6 +387,7 @@ char	*va(char *format, ...);
 void	EXPORT Draw_GetPicSize (int *w, int *h, char *name);
 void	EXPORT Draw_Pic (int x, int y, char *name);
 void	EXPORT Draw_StretchPic (int x, int y, int w, int h, char *name);
+void	EXPORT Draw_Crosshair (int vrect_x, int vrect_y, int vrect_w, int vrect_h, int offset_x, int offset_y, float scale, char *pic);
 void	EXPORT Draw_Char (int x, int y, int c);
 void	EXPORT Draw_TileClear (int x, int y, int w, int h, char *name);
 void	EXPORT Draw_Fill (int x, int y, int w, int h, int c);
@@ -392,6 +395,7 @@ void	EXPORT Draw_FadeScreen (void);
 void	EXPORT Draw_StretchRaw (int x, int y, int w, int h, int cols, int rows, byte *data);
 
 void	EXPORT R_BeginFrame( float camera_separation );
+void	R_UpdateHudScale (void);
 void	EXPORT R_SetPalette ( const unsigned char *palette);
 
 int		Draw_GetPalette (void);

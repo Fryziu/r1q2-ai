@@ -12,7 +12,7 @@ Język komunikacji: **polski**. Przed działaniem przeczytaj `AGENTS.md`, ten pl
   - Renderer: OpenGL 2.1 compatibility (`ref_gl`), `vid_ref gl`, brak software renderera, brak migracji na core profile/shadery.
   - Mysz (`IN_Frame` w `linux/vid_so.c`): grab sterowany przez `cl.refresh_prepped` i `cls.key_dest` (menu/konsola zwalniają kursor; w oknie wymagane `_windowed_mouse 1`).
 
-## 2. Zrealizowany i zweryfikowany stan projektu (Etapy 1–8: ZAKOŃCZONE)
+## 2. Zrealizowany i zweryfikowany stan projektu (Etapy 1–9: ZAKOŃCZONE)
 - **Platforma hosta:** Linux Mint 22.2 x86_64, jądro 7.0/6.8, GCC 13.3, SDL2 2.30, MinGW-w64 i686 GCC 13.2.
 - **Linux x86_64 (`make -j"$(nproc)"`):**
   - Artefakty: `binaries/client/quake2`, `binaries/r1q2ded/r1q2ded`, `binaries/game/gamex86_64.so`, `binaries/ref_gl/ref_gl.so`.
@@ -23,6 +23,8 @@ Język komunikacji: **polski**. Przed działaniem przeczytaj `AGENTS.md`, ten pl
     - `ref_gl/gl_model.c`: wywołanie `Hunk_End()` również przy trafieniu w `model_size_cache` (naprawa `munmap failed (22)` przy powrocie na mapę `base3 -> base2`).
     - `linux/q_shlinux.c`: `HUNK_HEADER_SIZE = sizeof(void *)` (wyrównanie 8B na LP64), walidacja długości ścieżek w `Sys_FindFirst`/`Sys_FindNext` (`Sys_MakePath`).
     - `qcommon/common.c`, `qcommon/net_chan.c`, `server/sv_ents.c`, `client/cl_ents.c`, `server/sv_world.c`, `client/snd_mem.c`, `ref_gl/gl_rsurf.c`: usunięte UB (przesunięcia bitowe na `uint32`, strażnik `z_game_magic` przez `memcpy`/`memcmp`, granica `map < MAXLIGHTMAPS`).
+    - `game/q_shared.c`, `client/console.c`: poprawiony warunek przepełnienia w `Com_sprintf` (`len < 0 || len >= size`) i rozmiar bufora wersji w `Con_DrawConsole` (`version[64]`).
+    - `ref_gl/gl_rmain.c`, `ref_gl/gl_draw.c`, `client/cl_view.c`, `linux/gl_sdl2.c`, `linux/vid_menu.c`, `linux/vid_so.c`: ujednolicona funkcja `R_UpdateHudScale()` (poprawne `gl_hudscale` po `vid_restart`/`Alt+Enter`, brak ucinania prawej krawędzi, minimum `320x240`), niezależne pikselowe skalowanie celownika `ch_scale` (`Draw_Crosshair` bez zmiany ABI `GetRefAPI`) oraz kontrolki `hud scale` (`1x`–`4x`) i `crosshair scale` (`1x`–`4x`) w menu Video.
 
 - **HTTP i duże tekstury (`client/cl_http.c`, `ref_gl/gl_image.c`):**
   - `USE_CURL=1` domyślnie (możliwe `USE_CURL=0` po `make distclean`). URL budowany z `CL_HTTPGamedir()`, zapis lokalny przez `FS_Gamedir()`, obsługa 301/302, limit `.filelist`, fallback UDP.
@@ -40,12 +42,12 @@ Język komunikacji: **polski**. Przed działaniem przeczytaj `AGENTS.md`, ten pl
 - **Komunikaty niebędące błędami:** `couldn't exec r1gl.cfg` (brak opcjonalnego cfg), `Function offsets ...` (diagnostyka `ReadLevel()`).
 
 ## 4. Plan kolejnych zadań (wybierać pojedynczo z użytkownikiem)
-1. **Skalowanie UI / HUD i celownika (crosshair) dla 1440p/4K (GŁÓWNY KANDYDAT):**
-   - Kod współdzielony (`client/cl_scrn.c`, `ref_gl/gl_draw.c`, `ref_gl/gl_rmain.c`).
-   - Cel: wykorzystanie/dopracowanie `gl_hudscale` oraz dodanie niezależnego skalowania celownika (crosshair) względem HUD, z zachowaniem dotychczasowego wyglądu jako ustawienia domyślnego.
+1. **Browser serwerów (Master Server List HTTP/HTTPS + OOB `status`) na wzór Q2Pro (GŁÓWNY KOLEJNY CEL):**
+   - Wstępna analiza w `reference/OpenCode_findings_Q2Pro_masterServerListProtocol.md` oraz wzorzec w `reference/q2pro/src/client/ui/servers.c`.
+   - Wykorzystanie istniejącego `libcurl` (`USE_CURL=1`) do pobierania list serwerów HTTP/HTTPS (format binarny 6B IP+port oraz plain text), odpytywanie UDP OOB `status` z rate-limitingiem i nowoczesny widok przeglądarki w kliencie.
 2. **Naprawa powielania ścieżki w `Sys_GetGameAPI` przy absolutnym `basedir`:**
    - W `linux/sys_linux.c` lokalna gra z absolutnym `basedir` powiela ścieżkę przy ładowaniu `gamex86_64.so`.
-3. **Drobne detale wideo / wejścia na Linuxie (XFCE, przenoszenie okna między monitorami, opcjonalnie kontroler/IME):**
+3. **Drobne detale wideo / wejścia na Linuxie (np. odstępy pól custom width/height w `vid_menu.c`, XFCE, przenoszenie okna między monitorami, opcjonalnie kontroler/IME):**
    - Każde jako osobne, małe zadanie.
 4. **Optymalizacja:** wyłącznie po wcześniejszym profilowaniu, bez przepisywania architektury renderera.
 

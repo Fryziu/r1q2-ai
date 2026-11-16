@@ -239,5 +239,6 @@ typedef struct
 // this is the only function actually exported at the linker level
 typedef	refexport_t	(EXPORT *GetRefAPI_t) (refimport_t);
 typedef	void (EXPORT *GetExtraAPI_t) (refimportnew_t);
+typedef	void (EXPORT *DrawCrosshair_t) (int vrect_x, int vrect_y, int vrect_w, int vrect_h, int offset_x, int offset_y, float scale, char *name);
 
 #endif // __REF_H

@@ -397,6 +397,104 @@ void EXPORT Draw_Pic (int x, int y, char *pic)
 
 /*
 =============
+Draw_Crosshair
+
+Draws the crosshair in native drawable pixel coordinates centered on the
+rendered 3D viewport, independent of gl_hudscale.
+=============
+*/
+void EXPORT Draw_Crosshair (int vrect_x, int vrect_y, int vrect_w, int vrect_h, int offset_x, int offset_y, float scale, char *pic)
+{
+	image_t	*gl;
+	int		cx, cy, w, h, x, y;
+
+	if (scale < 1.0f)
+		scale = 1.0f;
+
+	gl = Draw_FindPic (pic);
+	if (!gl)
+	{
+		ri.Con_Printf (PRINT_DEVELOPER, "Can't find pic: %s\n", pic);
+		gl = r_notexture;
+	}
+
+	if (scrap_dirty)
+		Scrap_Upload ();
+
+	cx = (int)floorf (((float)vrect_x + (float)vrect_w * 0.5f) * r_hudscale_x + 0.5f);
+	cy = (int)floorf (((float)vrect_y + (float)vrect_h * 0.5f) * r_hudscale_y + 0.5f);
+	w = (int)floorf ((float)gl->width * scale + 0.5f);
+	h = (int)floorf ((float)gl->height * scale + 0.5f);
+	if (w < 1)
+		w = 1;
+	if (h < 1)
+		h = 1;
+
+	x = cx + offset_x - (w >> 1);
+	y = cy + offset_y - (h >> 1);
+
+	qglMatrixMode (GL_PROJECTION);
+	qglLoadIdentity ();
+	qglOrtho (0, vid.width, vid.height, 0, -99999, 99999);
+	qglMatrixMode (GL_MODELVIEW);
+	qglLoadIdentity ();
+
+	if ( ( ( gl_config.renderer == GL_RENDERER_MCD ) || ( gl_config.renderer & GL_RENDERER_RENDITION ) ) && !gl->has_alpha)
+	{
+		qglDisable (GL_ALPHA_TEST);
+		GL_CheckForError ();
+	}
+
+	if (gl->has_alpha)
+	{
+		qglDisable (GL_ALPHA_TEST);
+		GL_CheckForError ();
+
+		qglEnable (GL_BLEND);
+		GL_CheckForError ();
+
+		GL_TexEnv (GL_MODULATE);
+	}
+
+	GL_Bind (gl->texnum);
+
+	qglBegin (GL_QUADS);
+	qglTexCoord2f (gl->sl, gl->tl);
+	qglVertex2i (x, y);
+	qglTexCoord2f (gl->sh, gl->tl);
+	qglVertex2i (x + w, y);
+	qglTexCoord2f (gl->sh, gl->th);
+	qglVertex2i (x + w, y + h);
+	qglTexCoord2f (gl->sl, gl->th);
+	qglVertex2i (x, y + h);
+	qglEnd ();
+
+	GL_CheckForError ();
+
+	if (gl->has_alpha)
+	{
+		GL_TexEnv (GL_REPLACE);
+		qglEnable (GL_ALPHA_TEST);
+		GL_CheckForError ();
+		qglDisable (GL_BLEND);
+		GL_CheckForError ();
+	}
+
+	if ( ( ( gl_config.renderer == GL_RENDERER_MCD ) || ( gl_config.renderer & GL_RENDERER_RENDITION ) ) && !gl->has_alpha)
+	{
+		qglEnable (GL_ALPHA_TEST);
+		GL_CheckForError ();
+	}
+
+	qglMatrixMode (GL_PROJECTION);
+	qglLoadIdentity ();
+	qglOrtho (0, vid_scaled_width, vid_scaled_height, 0, -99999, 99999);
+	qglMatrixMode (GL_MODELVIEW);
+	qglLoadIdentity ();
+}
+
+/*
+=============
 Draw_TileClear
 
 This repeats a 64*64 tile graphic to fill the screen around a sized down

@@ -12,11 +12,11 @@ ref_gl_SRC:=gl_draw.c gl_image.c gl_light.c gl_mesh.c gl_model.c gl_rmain.c\
 ref_gl_OBJ:=$(ref_gl_SRC:.c=.o)
 ALLSRC:=$(ref_gl_SRC)
 
-.PHONY: default combine
+.PHONY: default
 
 default: ref_gl.so
 
-TARGETS:=ref_gl.so ref_gl-combine.so
+TARGETS:=ref_gl.so
 
 include ../make.inc
 
@@ -24,8 +24,3 @@ LDFLAGS+=$(shell $(SDL2_CONFIG) --libs) -lm -lGL $(shell $(PKG_CONFIG) --libs li
 
 ref_gl.so: $(ref_gl_OBJ)
 	$(CC) -shared -g -o $@ $^ $(LDFLAGS)
-
-# Legacy GCC --combine target; not used by the normal build.
-combine: ref_gl-combine.so
-ref_gl-combine.so: $(ref_gl_SRC)
-	$(CC) $(shell $(SDL2_CONFIG) --cflags) -shared -O2 -ffloat-store -DNDEBUG -DLINUX -fPIC -fwhole-program --combine -g -o $@ $^ $(LDFLAGS)

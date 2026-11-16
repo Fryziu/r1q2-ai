@@ -19,7 +19,8 @@ extern cvar_t *scr_viewsize;
 static cvar_t *gl_mode;
 static cvar_t *gl_driver;
 static cvar_t *gl_picmip;
-static cvar_t *gl_ext_palettedtexture;
+static cvar_t *gl_hudscale;
+static cvar_t *ch_scale;
 
 static cvar_t *sw_mode;
 static cvar_t *sw_stipplealpha;
@@ -27,6 +28,35 @@ static cvar_t *sw_stipplealpha;
 static cvar_t *_windowed_mouse;
 
 extern void M_ForceMenuOff( void );
+
+static const float s_hudscale_values[] = { 1.0f, 1.5f, 2.0f, 2.5f, 3.0f, 4.0f };
+static const char *s_hudscale_cvar_strings[] = { "1", "1.5", "2", "2.5", "3", "4" };
+static const char *s_hudscale_names[] = { "1x", "1.5x", "2x", "2.5x", "3x", "4x", 0 };
+
+static const float s_chscale_values[] = { 1.0f, 1.5f, 2.0f, 2.5f, 3.0f, 3.5f, 4.0f };
+static const char *s_chscale_cvar_strings[] = { "1", "1.5", "2", "2.5", "3", "3.5", "4" };
+static const char *s_chscale_names[] = { "1x", "1.5x", "2x", "2.5x", "3x", "3.5x", "4x", 0 };
+
+#define NUM_HUDSCALE_PRESETS	(int)(sizeof(s_hudscale_values) / sizeof(s_hudscale_values[0]))
+#define NUM_CHSCALE_PRESETS		(int)(sizeof(s_chscale_values) / sizeof(s_chscale_values[0]))
+
+static int FindClosestScaleIndex( float value, const float *table, int count )
+{
+	int		i, best = 0;
+	float	best_diff = (float)fabs( value - table[0] );
+
+	for ( i = 1; i < count; i++ )
+	{
+		float diff = (float)fabs( value - table[i] );
+		if ( diff < best_diff )
+		{
+			best_diff = diff;
+			best = i;
+		}
+	}
+
+	return best;
+}
 
 /*
 ====================================================================
@@ -53,7 +83,8 @@ static menuslider_s		s_screensize_slider[2];
 static menuslider_s		s_brightness_slider[2];
 static menulist_s  		s_fs_box[2];
 static menulist_s  		s_stipple_box;
-static menulist_s  		s_paletted_texture_box;
+static menulist_s  		s_hudscale_box;
+static menulist_s  		s_chscale_box;
 static menulist_s  		s_windowed_mouse;
 static menuaction_s		s_apply_action[2];
 static menuaction_s		s_defaults_action[2];
@@ -122,7 +153,10 @@ static void ApplyChanges( void *unused )
 	Cvar_SetValue( "gl_picmip", 3 - s_tq_slider.curvalue );
 	Cvar_SetValue( "vid_fullscreen", s_fs_box[s_current_menu_index].curvalue );
 	Cvar_SetValue( "vid_display", s_display_list[s_current_menu_index].curvalue );
-	Cvar_SetValue( "gl_ext_palettedtexture", s_paletted_texture_box.curvalue );
+	if ( s_hudscale_box.curvalue >= 0 && s_hudscale_box.curvalue < NUM_HUDSCALE_PRESETS )
+		Cvar_Set( "gl_hudscale", s_hudscale_cvar_strings[s_hudscale_box.curvalue] );
+	if ( s_chscale_box.curvalue >= 0 && s_chscale_box.curvalue < NUM_CHSCALE_PRESETS )
+		Cvar_Set( "ch_scale", s_chscale_cvar_strings[s_chscale_box.curvalue] );
 
 	if (mode_selection == 13)
 		Cvar_SetValue( "gl_mode", VIDEO_MODE_DESKTOP );
@@ -209,8 +243,10 @@ void VID_MenuInit( void )
 		gl_mode = Cvar_Get( "gl_mode", "4", 0 );
 	if ( !sw_mode )
 		sw_mode = Cvar_Get( "sw_mode", "0", 0 );
-	if ( !gl_ext_palettedtexture )
-		gl_ext_palettedtexture = Cvar_Get( "gl_ext_palettedtexture", "1", CVAR_ARCHIVE );
+	if ( !gl_hudscale )
+		gl_hudscale = Cvar_Get( "gl_hudscale", "1", CVAR_ARCHIVE );
+	if ( !ch_scale )
+		ch_scale = Cvar_Get( "ch_scale", "1", CVAR_ARCHIVE );
 
 	if ( !sw_stipplealpha )
 		sw_stipplealpha = Cvar_Get( "sw_stipplealpha", "0", CVAR_ARCHIVE );
@@ -327,13 +363,13 @@ void VID_MenuInit( void )
 		s_defaults_action[i].generic.type = MTYPE_ACTION;
 		s_defaults_action[i].generic.name = "reset to default";
 		s_defaults_action[i].generic.x    = 0;
-		s_defaults_action[i].generic.y    = 110;
+		s_defaults_action[i].generic.y    = 115;
 		s_defaults_action[i].generic.callback = ResetDefaults;
 
 		s_apply_action[i].generic.type = MTYPE_ACTION;
 		s_apply_action[i].generic.name = "apply";
 		s_apply_action[i].generic.x    = 0;
-		s_apply_action[i].generic.y    = 120;
+		s_apply_action[i].generic.y    = 125;
 		s_apply_action[i].generic.callback = ApplyChanges;
 	}
 
@@ -377,12 +413,19 @@ void VID_MenuInit( void )
 	s_tq_slider.maxvalue = 3;
 	s_tq_slider.curvalue = 3-gl_picmip->value;
 
-	s_paletted_texture_box.generic.type = MTYPE_SPINCONTROL;
-	s_paletted_texture_box.generic.x	= 0;
-	s_paletted_texture_box.generic.y	= 90;
-	s_paletted_texture_box.generic.name	= "8-bit textures";
-	s_paletted_texture_box.itemnames = yesno_names;
-	s_paletted_texture_box.curvalue = gl_ext_palettedtexture->value;
+	s_hudscale_box.generic.type = MTYPE_SPINCONTROL;
+	s_hudscale_box.generic.x	= 0;
+	s_hudscale_box.generic.y	= 90;
+	s_hudscale_box.generic.name	= "hud scale";
+	s_hudscale_box.itemnames = s_hudscale_names;
+	s_hudscale_box.curvalue = FindClosestScaleIndex( gl_hudscale->value, s_hudscale_values, NUM_HUDSCALE_PRESETS );
+
+	s_chscale_box.generic.type = MTYPE_SPINCONTROL;
+	s_chscale_box.generic.x	= 0;
+	s_chscale_box.generic.y	= 100;
+	s_chscale_box.generic.name	= "crosshair scale";
+	s_chscale_box.itemnames = s_chscale_names;
+	s_chscale_box.curvalue = FindClosestScaleIndex( ch_scale->value, s_chscale_values, NUM_CHSCALE_PRESETS );
 
 	Menu_AddItem( &s_software_menu, ( void * ) &s_ref_list[SOFTWARE_MENU] );
 	Menu_AddItem( &s_software_menu, ( void * ) &s_mode_list[SOFTWARE_MENU] );
@@ -401,7 +444,8 @@ void VID_MenuInit( void )
 	Menu_AddItem( &s_opengl_menu, ( void * ) &s_width_field );
 	Menu_AddItem( &s_opengl_menu, ( void * ) &s_height_field );
 	Menu_AddItem( &s_opengl_menu, ( void * ) &s_tq_slider );
-	Menu_AddItem( &s_opengl_menu, ( void * ) &s_paletted_texture_box );
+	Menu_AddItem( &s_opengl_menu, ( void * ) &s_hudscale_box );
+	Menu_AddItem( &s_opengl_menu, ( void * ) &s_chscale_box );
 
 	Menu_AddItem( &s_software_menu, ( void * ) &s_defaults_action[SOFTWARE_MENU] );
 	Menu_AddItem( &s_software_menu, ( void * ) &s_apply_action[SOFTWARE_MENU] );

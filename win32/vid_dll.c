@@ -29,7 +29,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 //#include "zmouse.h"
 
 // Structure containing functions exported from refresh DLL
-refexport_t	re;
+refexport_t		re;
+DrawCrosshair_t	re_DrawCrosshair;
 
 static HWND old_hwnd = 0;
 
@@ -737,6 +738,7 @@ void VID_FreeReflib (void)
 	if ( !FreeLibrary( reflib_library ) )
 		Com_Error( ERR_FATAL, "Reflib FreeLibrary failed" );
 	memset (&re, 0, sizeof(re));
+	re_DrawCrosshair = NULL;
 	reflib_library = NULL;
 	reflib_active  = false;
 	cl_hwnd = NULL;
@@ -868,6 +870,7 @@ qboolean VID_LoadRefresh( char *name, char *errstr )
 		}
 
 		re = GetRefAPI( ri );
+		re_DrawCrosshair = (DrawCrosshair_t)GetProcAddress( reflib_library, "Draw_Crosshair" );
 
 		switch (re.api_version) {
 			case 3:

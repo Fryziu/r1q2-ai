@@ -2,8 +2,8 @@
 
 Dokument roboczy projektu. Aktualizujemy go po każdym zakończonym etapie oraz po istotnych testach. Główna instrukcja użytkownika znajduje się w `README.md`.
 
-**Stan na:** 2026-11-15  
-**Aktualny etap:** etap 8 zakończony i potwierdzony na Windows 11; ślad blastera zamknięty (OK w natywnych rozdzielczościach)  
+**Stan na:** 2026-11-16
+**Aktualny etap:** etap 9 zakończony — naprawiono `gl_hudscale` po `vid_restart`, dodano niezależne skalowanie celownika (`ch_scale`) i kontrolki `hud scale` / `crosshair scale` w menu Video; etap 8 (Windows 11) potwierdzony
 **Status:** cel osiągnięty — Linux x86_64 (SDL2 video/audio, HTTP, 3 monitory do 4K) oraz cross-build Windows 32-bit (`make win32`, Windows 11) potwierdzone przez użytkownika
 
 ## 1. Cel i sposób pracy
@@ -180,7 +180,7 @@ Wypisywane wcześniej `Function offsets 0` pochodzi z diagnostyki `ReadLevel()` 
 - **Cross-build Windows 32-bit (`make win32` -> `binaries/win32/`):** POTWIERDZONE na Windows 11; dalsza rozbudowa menu/wideo wersji Win32 jest wstrzymana (obecny stan wystarcza).
 - **Rozdzielczości SDL2, custom, fullscreen desktop i wybór monitora (Linux):** zaakceptowane na 3 monitorach (1440x900, 1920x1080, 3840x2160) w SP i MP.
 - **Audio SDL2 (PulseAudio) i HTTP/libcurl + duże obrazy (do 4096x4096):** zaimplementowane i przetestowane.
-- **Główny kolejny kandydat:** skalowanie HUD (`gl_hudscale`) i niezależne skalowanie celownika (crosshair) dla 1440p/4K.
+- **Główny kolejny kandydat:** naprawa powielania ścieżki w `Sys_GetGameAPI` przy absolutnym `basedir` (`linux/sys_linux.c`) oraz drobne detale okna/wejścia na Linuksie.
 
 ## 7. Plan kolejnych etapów
 
@@ -515,4 +515,12 @@ Nie wykonano commitów Git. Zmiany są zapisane w drzewie roboczym repozytorium.
 - Dodatkowo użytkownik potwierdził, że ślad blastera (`CL_BlasterTrail`) jest prawidłowy (wcześniejszy artefakt zniknął po wprowadzeniu natywnych rozdzielczości monitora) — temat zamknięty.
 - Następny etap do wyboru w kolejnej sesji: skalowanie HUD (`gl_hudscale`) oraz niezależne skalowanie crosshair dla 1440p/4K.
 
+### 2026-11-16 — etap 9: naprawa `gl_hudscale` po `vid_restart`, niezależne `ch_scale` i menu Video
 
+- Przyczyna błędu po `vid_restart` przy `gl_hudscale > 1`: `UpdateDrawableSize()` w `linux/gl_sdl2.c` wywoływało `ri.Vid_NewWindow(vid.width, vid.height)` z pełnym rozmiarem fizycznym zamiast podzielonym przez `gl_hudscale->value` (w odróżnieniu od `win32/glw_imp.c`), a `Cvar_Get("gl_hudscale", ...)` podczas `vid_restart` zwracało istniejący cvar z `modified == false`. W rezultacie klient liczył `scr_vrect` dla pełnej rozdzielczości, a `R_RenderView` mnożyło `refdef` jeszcze raz przez `gl_hudscale->value`, wypychając obraz 3D i UI poza granice okna.
+- Wprowadzono wspólną funkcję `R_UpdateHudScale()` w `ref_gl/gl_rmain.c` (z prototypem w `ref_gl/gl_local.h`), wywoływaną w `UpdateDrawableSize()`, `R_Init()` oraz przed ustawieniem `qglOrtho` w `R_BeginFrame()` (gdy `gl_hudscale->modified`). Zsynchronizowano `vid_scaled_width`/`vid_scaled_height` oraz `r_hudscale_x`/`r_hudscale_y` z zaokrąglonymi wymiarami `Vid_NewWindow`, eliminując ucinanie prawej krawędzi konsoli przy niepodzielnych skalach (np. `3x` w `1280x720`), oraz dodano bezpiecznik minimalnego wirtualnego płótna `320x240`. Dodano wywołanie `UpdateDrawableSize()` w `ToggleFullscreen()` (`Alt+Enter`) oraz `cl.force_refdef = true` w `VID_NewWindow()` (`linux/vid_so.c`).
+- Dodano niezależne od `gl_hudscale` skalowanie celownika przez cvar `ch_scale` (`CVAR_ARCHIVE`, domyślnie `1`; `gl_hudscale` również otrzymało `CVAR_ARCHIVE`). Wyeksportowano w `ref_gl/gl_draw.c` (i `ref_gl/ref_gl.def`) opcjonalną funkcję `Draw_Crosshair`, ładowaną dynamicznie w `linux/vid_so.c` i `win32/vid_dll.c` (bez naruszania ABI `GetRefAPI`), rysującą celownik w natywnych pikselach ekranu na geometrycznym środku widoku 3D (z fallbackiem `DrawStretchPic`).
+- W menu graficznym OpenGL (`linux/vid_menu.c`) zastąpiono nieaktywne `8-bit textures` kontrolkami `hud scale` (`1x`, `1.5x`, `2x`, `2.5x`, `3x`, `4x`) oraz `crosshair scale` (`1x`, `1.5x`, `2x`, `2.5x`, `3x`, `3.5x`, `4x`).
+- Podczas testu uruchomieniowego ASan/UBSan wykryto i naprawiono przepełnienie bufora stosu w `Con_DrawConsole` (`client/console.c`: powiększono `version[24]` do `version[64]`) wynikające z błędu warunku przepełnienia w `Com_sprintf` (`game/q_shared.c`: `len == size` poprawiono na `len < 0 || len >= size` z bezpiecznym kopiowaniem `memcpy`).
+- Zweryfikowano czystym buildem release (`make distclean && make -j8`), buildem `make sanitize` oraz uruchomieniem i zrzutami ekranu pod ASan/UBSan (kod wyjścia 0).
+- Wykonano porządkowanie drzewa repozytorium: usunięto stare pliki projektowe VC6 (`.dsw`, `.dsp`, `.aps`, `qe3.ico`, `ref_gl/resource.h`), martwy 32-bitowy asembler `ref_soft`/DOS, wycofane backendy (`svgalib`, `rw_x11`, `gl_fxmesa`, `snd_linux`, `gl_sdl`, `al_linux`, `rw_ddraw`/`rw_dib`, `sv_null`, `m_rider.h`, `client_dll`) oraz nieaktualny cel `combine` z `Makefile`; przeniesiono oryginalne teksty R1Q2 do `docs/legacy/`, `EFFORT_REPORT.md` do `docs/` i uzupełniono `.gitignore`.

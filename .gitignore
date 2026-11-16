@@ -1,2 +1,8 @@
 *.o
 **/.depends/
+binaries/client/quake2
+binaries/r1q2ded/r1q2ded
+binaries/game/gamex86_64.so
+binaries/ref_gl/ref_gl.so
+binaries/win32/
+reference/

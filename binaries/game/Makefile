@@ -19,11 +19,11 @@ game_SRC:=g_ai.c g_chase.c g_cmds.c g_combat.c g_func.c g_items.c g_main.c\
 game_OBJ:=$(game_SRC:.c=.o)
 ALLSRC:=$(game_SRC)
 
-.PHONY: default combine
+.PHONY: default
 
 default: game$(ARCH).so
 
-TARGETS:=game$(ARCH).so game$(ARCH)-combine.so
+TARGETS:=game$(ARCH).so
 
 game$(ARCH).so: $(game_OBJ)
 	$(CC) -shared -g -o $@ $^ $(LDFLAGS)

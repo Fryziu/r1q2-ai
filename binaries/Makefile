@@ -2,7 +2,7 @@ SANITIZE_DIR ?= /tmp/opencode/r1q2-sanitize
 SANITIZE_CC ?= gcc
 SANITIZE_FLAGS ?= -fsanitize=address,undefined -fno-omit-frame-pointer
 
-.PHONY: default all r1q2ded game client ref_gl win32 clean distclean combine sanitize help
+.PHONY: default all r1q2ded game client ref_gl win32 clean distclean sanitize help
 
 default: all
 
@@ -34,12 +34,6 @@ distclean:
 	$(MAKE) -C client distclean
 	$(MAKE) -C game distclean
 	$(MAKE) -C ref_gl distclean
-
-combine:
-	$(MAKE) -C r1q2ded combine
-	$(MAKE) -C client combine
-	$(MAKE) -C game combine
-	$(MAKE) -C ref_gl combine
 
 sanitize:
 	@set -eu; \

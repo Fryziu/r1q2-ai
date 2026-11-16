@@ -34,6 +34,7 @@ struct model_s	*gun_model;
 //=============
 
 cvar_t		*crosshair;
+cvar_t		*ch_scale;
 cvar_t		*cl_testparticles;
 cvar_t		*cl_testentities;
 cvar_t		*cl_testlights;
@@ -547,6 +548,8 @@ SCR_DrawCrosshair
 */
 __inline void SCR_DrawCrosshair (void)
 {
+	float	scale;
+
 	if (!crosshair->intvalue)
 		return;
 
@@ -559,8 +562,30 @@ __inline void SCR_DrawCrosshair (void)
 	if (!crosshair_pic[0])
 		return;
 
-	re.DrawPic (scr_vrect.x + scr_crosshair_x->intvalue + ((scr_vrect.width - crosshair_width)>>1)
-	, scr_vrect.y + + scr_crosshair_y->intvalue + ((scr_vrect.height - crosshair_height)>>1), crosshair_pic);
+	if (ch_scale->value < 1.0f)
+		Cvar_Set ("ch_scale", "1");
+
+	scale = (ch_scale->value >= 1.0f) ? ch_scale->value : 1.0f;
+
+	if (re_DrawCrosshair)
+	{
+		re_DrawCrosshair (scr_vrect.x, scr_vrect.y, scr_vrect.width, scr_vrect.height,
+			scr_crosshair_x->intvalue, scr_crosshair_y->intvalue, scale, crosshair_pic);
+	}
+	else
+	{
+		int w = (int)(crosshair_width * scale);
+		int h = (int)(crosshair_height * scale);
+
+		if (w < 1)
+			w = 1;
+		if (h < 1)
+			h = 1;
+
+		re.DrawStretchPic (scr_vrect.x + scr_crosshair_x->intvalue + ((scr_vrect.width - w)>>1),
+			scr_vrect.y + scr_crosshair_y->intvalue + ((scr_vrect.height - h)>>1),
+			w, h, crosshair_pic);
+	}
 }
 
 int spc = 0;
@@ -868,6 +893,7 @@ void V_Init (void)
 
 	crosshair = Cvar_Get ("crosshair", "0", CVAR_ARCHIVE);
 	crosshair->changed = OnCrossHairChange;
+	ch_scale = Cvar_Get ("ch_scale", "1", CVAR_ARCHIVE);
 
 	cl_particlecount = Cvar_Get ("cl_particlecount", "16384", 0);
 	cl_particlecount->changed = _particlecount_changed;

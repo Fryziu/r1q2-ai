@@ -1325,18 +1325,24 @@ int Com_sprintf (char /*@out@*/*dest, int size, const char *fmt, ...)
 	va_list		argptr;
 	char		bigbuffer[0x10000];
 
+	if (size <= 0)
+		return 0;
+
+	if (size > (int)sizeof(bigbuffer))
+		size = (int)sizeof(bigbuffer);
+
 	va_start (argptr,fmt);
 	len = Q_vsnprintf (bigbuffer, sizeof(bigbuffer), fmt, argptr);
 	va_end (argptr);
 
-	if (len == -1 || len == size)
+	if (len < 0 || len >= size)
 	{
 		Com_Printf ("Com_sprintf: overflow of size %d\n", LOG_GENERAL, size);
 		len = size-1;
 	}
 
-	bigbuffer[size-1] = '\0';
-	strcpy (dest, bigbuffer);
+	bigbuffer[len] = '\0';
+	memcpy (dest, bigbuffer, (size_t)len + 1);
 
 	return len;
 }

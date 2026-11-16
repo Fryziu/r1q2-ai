@@ -40,6 +40,7 @@ model_t		*r_worldmodel;
 double		gldepthmin, gldepthmax;
 
 double		vid_scaled_width, vid_scaled_height;
+float		r_hudscale_x = 1.0f, r_hudscale_y = 1.0f;
 
 glconfig_t gl_config;
 glstate_t  gl_state;
@@ -1157,12 +1158,15 @@ void R_RenderView (refdef_t *fd)
 
 	r_newrefdef = *fd;
 
-	if (FLOAT_NE_ZERO(gl_hudscale->value))
+	if (r_hudscale_x != 1.0f || r_hudscale_y != 1.0f)
 	{
-		r_newrefdef.width = (int)(r_newrefdef.width * gl_hudscale->value);
-		r_newrefdef.height = (int)(r_newrefdef.height * gl_hudscale->value);
-		r_newrefdef.x = (int)(r_newrefdef.x * gl_hudscale->value);
-		r_newrefdef.y = (int)(r_newrefdef.y * gl_hudscale->value);
+		int x2 = (int)floorf ((float)(r_newrefdef.x + r_newrefdef.width) * r_hudscale_x + 0.5f);
+		int y2 = (int)floorf ((float)(r_newrefdef.y + r_newrefdef.height) * r_hudscale_y + 0.5f);
+
+		r_newrefdef.x = (int)floorf ((float)r_newrefdef.x * r_hudscale_x + 0.5f);
+		r_newrefdef.y = (int)floorf ((float)r_newrefdef.y * r_hudscale_y + 0.5f);
+		r_newrefdef.width = x2 - r_newrefdef.x;
+		r_newrefdef.height = y2 - r_newrefdef.y;
 	}
 
 	if (!r_worldmodel && !( r_newrefdef.rdflags & RDF_NOWORLDMODEL ) )
@@ -1406,7 +1410,7 @@ void R_Register( void )
 	gl_ext_samples = ri.Cvar_Get ("gl_ext_samples", "2", 0);
 	
 	gl_zfar = ri.Cvar_Get ("gl_zfar", "8192", 0);
-	gl_hudscale = ri.Cvar_Get ("gl_hudscale", "1", 0);
+	gl_hudscale = ri.Cvar_Get ("gl_hudscale", "1", CVAR_ARCHIVE);
 
 	cl_version = ri.Cvar_Get ("cl_version", REF_VERSION, CVAR_NOSET); 
 	
@@ -1920,8 +1924,7 @@ retryQGL:
 	GL_SetDefaultState();
 
 	//r1: setup cached screensizes
-	vid_scaled_width = vid.width / gl_hudscale->value;
-	vid_scaled_height = vid.height / gl_hudscale->value;
+	R_UpdateHudScale ();
 
 	/*
 	** draw our stereo patterns
@@ -2003,6 +2006,47 @@ void GL_UpdateAnisotropy (void)
 	}
 }
 
+
+void R_UpdateHudScale (void)
+{
+	int		width, height;
+	float	scale, max_w, max_h, max_scale;
+
+	if (gl_hudscale->value < 1.0f)
+		ri.Cvar_Set ("gl_hudscale", "1");
+
+	gl_hudscale->modified = false;
+	scale = (gl_hudscale->value >= 1.0f) ? gl_hudscale->value : 1.0f;
+
+	// keep the virtual 2D canvas at least 320x240 so menus and HUD always fit
+	max_w = (float)vid.width / 320.0f;
+	max_h = (float)vid.height / 240.0f;
+	max_scale = (max_w < max_h) ? max_w : max_h;
+	if (max_scale < 1.0f)
+		max_scale = 1.0f;
+	if (scale > max_scale)
+		scale = max_scale;
+
+	//r1: hudscaling
+	width = (int)ceilf ((float)vid.width / scale);
+	height = (int)ceilf ((float)vid.height / scale);
+
+	//round to powers of 8/2 to avoid blackbars
+	width = (width + 7) & ~7;
+	height = (height + 1) & ~1;
+	if (width > (int)vid.width)
+		width = (int)vid.width;
+	if (height > (int)vid.height)
+		height = (int)vid.height;
+
+	vid_scaled_width = (double)width;
+	vid_scaled_height = (double)height;
+	r_hudscale_x = (width > 0) ? ((float)vid.width / (float)width) : 1.0f;
+	r_hudscale_y = (height > 0) ? ((float)vid.height / (float)height) : 1.0f;
+
+	// let the sound and input subsystems know about the new window
+	ri.Vid_NewWindow (width, height);
+}
 
 /*
 @@@@@@@@@@@@@@@@@@@@@
@@ -2092,6 +2136,9 @@ void EXPORT R_BeginFrame( float camera_separation )
 	GLimp_BeginFrame ();
 #endif
 
+	if (gl_hudscale->modified)
+		R_UpdateHudScale ();
+
 	/*
 	** go into 2D mode
 	*/
@@ -2166,36 +2213,6 @@ void EXPORT R_BeginFrame( float camera_separation )
 		}
 		
 		gl_ext_texture_filter_anisotropic->modified = false;
-	}
-
-	if (gl_hudscale->modified)
-	{
-		int width, height;
-
-		gl_hudscale->modified = false;
-
-		if (gl_hudscale->value < 1.0f)
-		{
-			ri.Cvar_Set ("gl_hudscale", "1.0");
-		}
-		else
-		{
-			//r1: hudscaling
-			width = (int)ceilf((float)vid.width / gl_hudscale->value);
-			height = (int)ceilf((float)vid.height / gl_hudscale->value);
-
-			//round to powers of 8/2 to avoid blackbars
-			width = (width+7)&~7;
-			height = (height+1)&~1;
-
-			gl_hudscale->modified = false;
-
-			vid_scaled_width = vid.width / gl_hudscale->value;
-			vid_scaled_height = vid.height / gl_hudscale->value;
-
-			// let the sound and input subsystems know about the new window
-			ri.Vid_NewWindow (width, height);
-		}
 	}
 
 #if 0

@@ -165,7 +165,7 @@ connect ADRES_SERWERA
 - `gl_mode -2` — natywna rozdzielczość wybranego monitora;
 - `vid_restart` — ponowna inicjalizacja renderera.
 
-Okno jest ograniczane do usable bounds, a drawable uwzględnia High DPI. `gl_hudscale` umożliwia skalowanie HUD. Niezależne skalowanie crosshair jest osobnym planowanym etapem i nie jest jeszcze dostępne.
+Okno jest ograniczane do usable bounds, a drawable uwzględnia High DPI. `gl_hudscale` umożliwia skalowanie HUD/menu/konsoli (w menu `Video`: `1x`–`4x` z krokami połówkowymi, z automatycznym zachowaniem minimum `320×240` płótna 2D), natomiast `ch_scale` steruje niezależnym skalowaniem celownika w fizycznych pikselach ekranu (`1x`–`4x` w menu `Video`).
 
 ### Mysz i klawiatura
 
@@ -184,7 +184,7 @@ s_khz 44100
 snd_restart
 ```
 
-Dostępne częstotliwości: 11025, 22050, 44100 i 48000 Hz. `s_initsound 0` wyłącza audio. Stary OSS `linux/snd_linux.c` nie jest kompilowany.
+Dostępne częstotliwości: 11025, 22050, 44100 i 48000 Hz. `s_initsound 0` wyłącza audio.
 
 ## Pobieranie HTTP/HTTPS
 
@@ -271,21 +271,19 @@ Dokumentacja:
 
 - `README.md` — główna instrukcja użytkownika;
 - `PORTING_LINUX.md` — szczegółowa historia zmian i testów;
-- `EFFORT_REPORT.md` — historyczny raport zakresu prac;
 - `AGENTS.md` — zasady pracy dla kolejnych agentów;
 - `NEXT_SESSION_PROMPT.md` — krótki brief kolejnej sesji;
-- `readme.txt` — oryginalny, historyczny dokument R1Q2, zachowany bez zmian.
+- `docs/EFFORT_REPORT.md` — historyczny raport zakresu prac;
+- `docs/legacy/` — oryginalne dokumenty R1Q2 (`r1q2.txt`, `readme.txt`, `TODO.txt`), zachowane bez zmian.
 
 ## Znane ograniczenia i uwagi
 
 - `couldn't exec r1gl.cfg` oznacza brak opcjonalnego pliku konfiguracyjnego i nie jest błędem krytycznym.
 - `Function offsets ...` jest diagnostyką `ReadLevel()` na systemach innych niż Windows; obecne save/load działa.
-- Ślad blastera nadal ma przerwy i wymaga osobnej analizy generowania oraz rysowania cząsteczek.
 - Joystick jest wyłączony. Unicode/IME, SDL_GameController i pełna obsługa urządzeń audio nie są zaimplementowane.
 - Nie planowana jest migracja na Vulkan, OpenGL core ani shadery dla samej nowoczesności.
 - Lokalna gra z absolutnym `basedir` wymaga dodatkowej poprawki `Sys_GetGameAPI`, ponieważ ścieżka `gamex86_64.so` może zostać powielona. Zalecany jest start z katalogu gry zgodnie z sekcją instalacji.
 - Stare ostrzeżenia kompilatora są poprawiane selektywnie, nie masowo.
-- Historyczny cel `combine` pozostaje osobnym eksperymentem i nie jest używany przez zwykły build.
 
 ## Licencja i zasoby
 

@@ -546,6 +546,8 @@ static void ConstrainWindowSize (int display_index)
 		vid.height = 1;
 }
 
+static void UpdateDrawableSize (void);
+
 static int ApplyFullscreen (int fullscreen_mode)
 {
 	int display_index;
@@ -624,6 +626,7 @@ static void ToggleFullscreen (void)
 	fullscreen = ri.Cvar_Get ("vid_fullscreen", "0", 0);
 	ri.Cvar_SetValue ("vid_fullscreen", target);
 	fullscreen->modified = false;
+	UpdateDrawableSize ();
 }
 
 static void GetEvent(SDL_Event *event)
@@ -882,7 +885,7 @@ static void UpdateDrawableSize (void)
 		vid.width = width;
 		vid.height = height;
 	}
-	ri.Vid_NewWindow (vid.width, vid.height);
+	R_UpdateHudScale ();
 	ri.Con_Printf (PRINT_ALL, "SDL display %d, drawable size %d %d\n",
 		GetRequestedDisplay (), vid.width, vid.height);
 }
