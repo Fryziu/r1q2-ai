@@ -402,7 +402,7 @@ ____________________________________________________________________________
 
 //XXX: this breaks on strings that contain high ascii chars! not safe to use for measuring string
 //length to strcpy() into.
-#if !defined _M_AMD64
+#if defined _MSC_VER && !defined _M_AMD64
 size_t __cdecl fast_strlen(const char *s)
 {
     __asm

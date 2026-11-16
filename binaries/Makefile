@@ -2,11 +2,14 @@ SANITIZE_DIR ?= /tmp/opencode/r1q2-sanitize
 SANITIZE_CC ?= gcc
 SANITIZE_FLAGS ?= -fsanitize=address,undefined -fno-omit-frame-pointer
 
-.PHONY: default all r1q2ded game client ref_gl clean distclean combine sanitize help
+.PHONY: default all r1q2ded game client ref_gl win32 clean distclean combine sanitize help
 
 default: all
 
 all: r1q2ded client game ref_gl
+
+win32:
+	$(MAKE) -f Makefile.win32 all
 
 r1q2ded:
 	$(MAKE) -C r1q2ded
@@ -54,6 +57,7 @@ sanitize:
 help:
 	@printf '%s\n' \
 		'make [all]             Build client, dedicated server, game and renderer' \
+		'make win32             Cross-compile 32-bit Windows binaries into binaries/win32' \
 		'make clean             Remove objects and binaries' \
 		'make distclean         Also remove generated dependencies' \
 		'make sanitize          Build ASan/UBSan in /tmp/opencode' \

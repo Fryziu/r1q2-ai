@@ -83,10 +83,12 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #endif
 //#pragma warning(disable: 4996)		// deprecated functions
 
+#ifdef _MSC_VER
 #pragma intrinsic(memcmp)
 //#pragma intrinsic(memset)
+#endif
 
-#if _MSC_VER >= 1400
+#if defined(_MSC_VER) && _MSC_VER >= 1400
 	#define NORETURN __declspec(noreturn)
 	#define RESTRICT __declspec(restrict)
 	#define NOALIAS __declspec(noalias)
@@ -94,8 +96,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 	#define RESTRICT
 	#define NORETURN
 	#define NOALIAS
+	#ifndef __GNUC__
 	#define sqrtf (float)sqrt
 	#define ceilf (float)ceil
+	#endif
 #endif
 
 #define alloca _alloca
@@ -123,8 +127,13 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 //#else
  //#define DEBUGBREAKPOINT DebugBreak
 //#endif
+#ifdef __GNUC__
+#define PACKED_STRUCT __attribute__((packed))
+#define _ReturnAddress() __builtin_return_address(0)
+#else
 #define __attribute__(x) 
 #define PACKED_STRUCT
+#endif
 typedef __int32 int32;
 typedef __int16 int16;
 typedef __int64 int64;

@@ -33,7 +33,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <conio.h>
 #include <process.h>
 #include <dbghelp.h>
-#include <Richedit.h>
+#include <richedit.h>
 
 #ifdef USE_OPENSSL
 #define OPENSSLEXPORT __cdecl
@@ -68,7 +68,7 @@ cvar_t	*win_priority;
 qboolean s_win95;
 
 int			starttime;
-int			ActiveApp;
+qboolean	ActiveApp;
 qboolean	Minimized;
 
 HWND		hwnd_Server;
@@ -1641,7 +1641,9 @@ VOID R1Q2UploadCrashDump (LPCSTR crashDump, LPCSTR crashText)
 
 	BOOL	console = FALSE;
 
+#ifdef _MSC_VER
 	__try
+#endif
 	{
 		lenDmp = Sys_FileLength (crashDump);
 		lenTxt = Sys_FileLength (crashText);
@@ -1718,11 +1720,13 @@ VOID R1Q2UploadCrashDump (LPCSTR crashDump, LPCSTR crashText)
 			}
 		}
 	}
+#ifdef _MSC_VER
 	__except (EXCEPTION_EXECUTE_HANDLER)
 	{
 		if (!win_silentexceptionhandler->intvalue)
 			MessageBox (NULL, "An exception occured while trying to upload the crash dump. Please post it manually on the R1Q2 forums.", "Upload Error", MB_ICONEXCLAMATION | MB_OK);
 	}
+#endif
 
 	if (console)
 		FreeConsole ();
@@ -2343,6 +2347,21 @@ void Sys_Spinstats_f (void)
 
 #ifdef _M_IX86
 
+#ifdef __GNUC__
+unsigned short Sys_GetFPUStatus (void)
+{
+	unsigned short fpuword = 0;
+	__asm__ __volatile__ ("fnstcw %0" : "=m" (fpuword));
+	return fpuword;
+}
+
+void Sys_SetFPU (byte bits)
+{
+	unsigned short fpuword = Sys_GetFPUStatus ();
+	fpuword = (unsigned short)((fpuword & 0xf0ffU) | ((unsigned short)bits << 8));
+	__asm__ __volatile__ ("fldcw %0" : : "m" (fpuword));
+}
+#else
 __declspec(naked) unsigned short Sys_GetFPUStatus (void)
 {
 	__asm
@@ -2373,6 +2392,7 @@ void Sys_SetFPU (byte bits)
 		pop eax
 	}
 }
+#endif
 
 //FPU should be round to nearest, 24 bit precision.
 //3.20 = 0x007f
@@ -2454,7 +2474,9 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 #endif
 
 
+#ifdef _MSC_VER
 	__try
+#endif
 	{
 		Sys_SetFPU (sys_fpu_bits->intvalue);
 		Sys_CheckFPUStatus ();
@@ -2559,10 +2581,12 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 			oldtime = newtime;
 		}
 	}
+#ifdef _MSC_VER
 	__except (R1Q2ExceptionHandler(GetExceptionCode(), GetExceptionInformation()))
 	{
 		return 1;
 	}
+#endif
 
 	return 0;
 }

@@ -2,9 +2,9 @@
 
 Dokument roboczy projektu. Aktualizujemy go po każdym zakończonym etapie oraz po istotnych testach. Główna instrukcja użytkownika znajduje się w `README.md`.
 
-**Stan na:** 2026-11-13  
-**Aktualny etap:** etap 7 — porządki buildu i dokumentacja użytkownika wykonane; oczekiwana akceptacja użytkownika  
-**Status:** cel osiągnięty — singleplayer, multiplayer, SDL2, audio i wszystkie trzy monitory do 4K potwierdzone przez użytkownika
+**Stan na:** 2026-11-15  
+**Aktualny etap:** etap 8 zakończony i potwierdzony na Windows 11; ślad blastera zamknięty (OK w natywnych rozdzielczościach)  
+**Status:** cel osiągnięty — Linux x86_64 (SDL2 video/audio, HTTP, 3 monitory do 4K) oraz cross-build Windows 32-bit (`make win32`, Windows 11) potwierdzone przez użytkownika
 
 ## 1. Cel i sposób pracy
 
@@ -174,18 +174,13 @@ Test integracyjny na rzeczywistych funkcjach z `linux/q_shlinux.c` wykonał 100 
 
 Wypisywane wcześniej `Function offsets 0` pochodzi z diagnostyki `ReadLevel()` na systemach innych niż Windows i przy niezmienionym module gry nie jest komunikatem o błędzie.
 
-## 6. Aktualne znane problemy
+## 6. Aktualny status zagadnień (skondensowany)
 
-- przerwy w śladzie cząsteczek blastera — problem nadal występuje, ale ma niższy priorytet; algorytm celowo umieszcza cząsteczki co 5 jednostek;
-- nowe rozdzielczości, custom, fullscreen desktop i wybór monitora zostały zaakceptowane przez użytkownika, także podczas gry multiplayer;
-- audio SDL2 zostało zaakceptowane przez użytkownika na PulseAudio; domyślne jest `s_initsound 1`;
-- pobieranie HTTP przez libcurl jest zaimplementowane i przetestowane lokalnie oraz na zewnętrznym serwerze; oczekiwana akceptacja użytkownika;
-- `couldn't exec r1gl.cfg` oznacza brak opcjonalnego pliku konfiguracyjnego i nie jest regresją;
-- liczne stare ostrzeżenia kompilatora; usuwamy je selektywnie, nie masowo;
-- etap 1 został potwierdzony: `newgame`, przejścia i powroty między mapami oraz save/load działają;
-- natywny SDL2, pełny obrót myszy, konsola i Alt+Tab zostały potwierdzone na jednym monitorze;
-- fullscreen desktop został potwierdzony na wszystkich trzech monitorach (1440x900, 1920x1080 i 3840x2160), także podczas gry multiplayer;
-- joystick pozostaje wyłączony jak poprzednio; Unicode/IME, High DPI, fullscreen desktop i wybór monitora są celowo poza etapem 2.
+- **Ślad cząsteczek blastera (`CL_BlasterTrail`):** ZAMKNIĘTE / OK — obserwowany wcześniej efekt przerw zniknął po wprowadzeniu natywnych rozdzielczości monitora; kod nie wymaga zmian.
+- **Cross-build Windows 32-bit (`make win32` -> `binaries/win32/`):** POTWIERDZONE na Windows 11; dalsza rozbudowa menu/wideo wersji Win32 jest wstrzymana (obecny stan wystarcza).
+- **Rozdzielczości SDL2, custom, fullscreen desktop i wybór monitora (Linux):** zaakceptowane na 3 monitorach (1440x900, 1920x1080, 3840x2160) w SP i MP.
+- **Audio SDL2 (PulseAudio) i HTTP/libcurl + duże obrazy (do 4096x4096):** zaimplementowane i przetestowane.
+- **Główny kolejny kandydat:** skalowanie HUD (`gl_hudscale`) i niezależne skalowanie celownika (crosshair) dla 1440p/4K.
 
 ## 7. Plan kolejnych etapów
 
@@ -505,4 +500,19 @@ Nie wykonano commitów Git. Zmiany są zapisane w drzewie roboczym repozytorium.
 - Sumy czterech binarek release przed i po `make sanitize` są identyczne. Stare `snd_linux.o` i `gl_sdl.o` zostały usunięte. `make help` przechodzi, `git diff --check` przechodzi i nie wykonano commitów.
 - Logi: `/tmp/opencode/r1q2-correctness/makefile-reorg-build.log`, `makefile-no-curl-build.log`, `makefile-default-restored-build.log`, `make-sanitize-target.log`, `makefile-final-incremental.log` i `makefile-final-build.log`.
 - Następny wybór po akceptacji: analiza śladu blastera albo skalowanie HUD i niezależne skalowanie crosshair.
+
+### 2026-11-15 — etap 8: cross-kompilacja dla Windows 32-bit (i686-w64-mingw32)
+
+- Zbudowano w `/tmp/opencode/win32-deps` statyczne biblioteki 32-bitowe dla `i686-w64-mingw32`: `libpng 1.6.43`, `libjpeg-turbo 2.1.5` oraz `libcurl 8.5.0` (z natywnym backendem TLS Schannel i wątkami Win32 bez zależności od `libwinpthread`).
+- Dostosowano kod `win32/` i wspólne nagłówki do kompilatora MinGW-w64 GCC z zachowaniem zgodności z MSVC (`_MSC_VER`) oraz Linuxem:
+  - `game/q_shared.h`: pod `_WIN32` zachowano `__attribute__` dla GCC (co zapobiega wycinaniu atrybutu `__stdcall` z nagłówków Win32/OpenGL), zmapowano `_ReturnAddress()` na `__builtin_return_address(0)` i ograniczono `#pragma intrinsic` oraz `__declspec(restrict)` do `_MSC_VER`.
+  - `qcommon/qcommon.h`, `win32/q_shwin.c`, `client/snd_mix.c`: bloki asemblera inline MSVC (`__asm`) ograniczono do `_MSC_VER`, wybierając dla GCC przenośne warianty C.
+  - `win32/sys_win.c`, `win32/vid_dll.c`: poprawiono wielkość liter `<richedit.h>` i ukośniki w `#include "../client/client.h"`, ujednolicono typ `qboolean ActiveApp`, dodano wariant GCC dla `Sys_GetFPUStatus`/`Sys_SetFPU` (zachowujący bitową maskę słowa kontrolnego x87) i uwarunkowano bloki SEH `__try`/`__except` przez `#ifdef _MSC_VER`.
+  - `win32/snd_win.c`, `win32/vid_menu.c`, `win32/glw_imp.c`: ujednolicono prototypy `SNDDMA_InitDirect`, `SNDDMA_Init`, `GLimp_SetMode` i `GLimp_Init` oraz zmieniono nazwę lokalnego `DriverCallback` na `VID_DriverCallback` (konflikt z `<mmiscapi.h>`).
+- Dodano `binaries/Makefile.win32` i target `make win32`, który tworzy w `binaries/win32/` samowystarczalne binarki PE32 (`r1q2.exe`, `quake2.exe`, `ref_gl.dll`, `ref_r1gl.dll`, `gamex86.dll`, `r1q2ded.exe`) ze statycznie wlinkowanymi `libpng`, `libjpeg`, `libcurl`, `zlib` i `libgcc`.
+- Weryfikacja: zarówno `make -j"$(nproc)" win32`, jak i czysty build Linuxowy (`make distclean && make -j"$(nproc)"`) zakończyły się kodem 0; tablice eksportów PE zawierają `GetRefAPI`, `GetExtraAPI` i `GetGameAPI`, a importy ograniczają się wyłącznie do systemowych bibliotek Windows.
+- Test użytkownika: potwierdzono poprawne uruchomienie i działanie gry w systemie Windows 11. Dalsze zrównywanie warstwy `win32/` z `linux/` odłożone na później.
+- Dodatkowo użytkownik potwierdził, że ślad blastera (`CL_BlasterTrail`) jest prawidłowy (wcześniejszy artefakt zniknął po wprowadzeniu natywnych rozdzielczości monitora) — temat zamknięty.
+- Następny etap do wyboru w kolejnej sesji: skalowanie HUD (`gl_hudscale`) oraz niezależne skalowanie crosshair dla 1440p/4K.
+
 

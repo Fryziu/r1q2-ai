@@ -24,7 +24,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #define WIN32_LEAN_AND_MEAN
 #define _WIN32_WINNT 0x0400
 #include "resource.h"
-#include "..\client\client.h"
+#include "../client/client.h"
 #include "winquake.h"
 //#include "zmouse.h"
 
@@ -842,7 +842,9 @@ qboolean VID_LoadRefresh( char *name, char *errstr )
 
 	Com_DPrintf ("refimport_t set.\n");
 
+#ifdef _MSC_VER
 	__try
+#endif
 	{
 		if ( ( GetRefAPI = (GetRefAPI_t)GetProcAddress( reflib_library, "GetRefAPI" ) ) == 0 )
 		{
@@ -903,10 +905,12 @@ qboolean VID_LoadRefresh( char *name, char *errstr )
 			return false;
 		}
 	}
+#ifdef _MSC_VER
 	__except (VidDLLExceptionHandler (GetExceptionCode (), GetExceptionInformation(), errstr))
 	{
 		return false;
 	}
+#endif
 
 	if (re.AppActivate == NULL ||
 		re.BeginFrame == NULL ||

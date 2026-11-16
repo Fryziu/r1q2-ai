@@ -51,7 +51,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 	#ifdef _M_AMD64 
 		#define	CPUSTRING	"AMD64"
-	#elif defined _M_IX86
+	#elif defined _M_IX86 || defined __i386__
 		#define	CPUSTRING	"x86"
 	#elif defined _M_IA64
 		#define	CPUSTRING	"IA64"
@@ -1111,7 +1111,7 @@ void Qcommon_Init (int argc, char **argv);
 void Qcommon_Frame (int msec);
 void Qcommon_Shutdown (void);
 
-#if defined _WIN32 && !defined _M_AMD64
+#if defined _MSC_VER && !defined _M_AMD64
 size_t __cdecl fast_strlen(const char *s);
 void __fastcall fast_strlwr(char *s);
 int __cdecl fast_tolower(int c);
