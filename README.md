@@ -1,24 +1,27 @@
-# R1Q2 Linux — SDL2 / OpenGL
+# R1Q2 (Linux x86-64 & Windows 32-bit) — SDL2 / OpenGL
 
-Natywny port klienta **R1Q2 / Quake II** dla współczesnego Linuxa x86-64. Projekt zachowuje historyczny kod i kompatybilność zasobów, a jednocześnie zastępuje przestarzałe backendy SDL 1.2 i OSS przez SDL2.
+Natywny port klienta **R1Q2 / Quake II** dla współczesnego Linuxa x86-64 oraz 32-bitowego systemu Windows (cross-kompilacja MinGW-w64). Projekt zachowuje historyczny kod, fizykę i kompatybilność zasobów, zastępując przestarzałe backendy (SDL 1.2, OSS, DirectInput/DirectSound/WGL) wspólnym, nowoczesnym backendem **SDL2**.
 
-**Stan dokumentacji:** 2026-11-13.
+**Stan dokumentacji:** 2026-11-17.
 
 ## Najważniejsze funkcje
 
-- klient i serwer dedykowany dla Linux x86-64;
+- klient i serwer dedykowany dla Linux x86-64 oraz klient dla Windows 32-bit (Windows 10/11);
+- unikalne nazwy plików wykonywalnych i bibliotek (`r1q2`, `ref_r1q2gl`, `r1q2_game*`, `r1q2ded`), dzięki którym instalacja we wspólnym katalogu Quake II nie nadpisuje plików innych klientów;
 - singleplayer, multiplayer, save/load i przejścia między mapami;
-- SDL2 video, klawiatura i mysz, OpenGL compatibility;
-- SDL2 audio, 16-bit stereo, 11025/22050/44100/48000 Hz;
+- wspólny backend SDL2 video, klawiatura i mysz oraz OpenGL 2.1 compatibility;
+- wspólny backend SDL2 audio, 16-bit stereo, 11025/22050/44100/48000 Hz;
 - fullscreen exclusive, fullscreen desktop i tryb okna;
-- wybór monitora SDL, custom width/height i rozdzielczości do 3840×2160;
-- pobieranie map, modeli, dźwięków i innych zasobów przez HTTP/HTTPS z fallbackiem UDP;
+- wybór monitora SDL (`vid_display`), custom width/height i rozdzielczości do 3840×2160 (4K);
+- skalowanie interfejsu (`gl_hudscale` `1x`–`4x`) oraz niezależne skalowanie celownika (`ch_scale` `1x`–`4x`) z poziomu menu `Video`;
+- stałe przechwycenie myszy w oknie gry (także w menu i konsoli — bezproblemowe bindowanie `Mouse1`–`Mouse5`, zwalniane przez `Alt+Tab` lub `Ctrl+G`);
+- pobieranie map, tekstur, modeli, dźwięków i innych zasobów przez HTTP/HTTPS z automatycznym fallbackiem do tradycyjnego protokołu UDP Quake II (również dla pojedynczych plików zwracających `HTTP 404`);
 - bezpieczne ścieżki URL zgodne z Q2Pro — katalog moda nie jest zastępowany lokalną ścieżką `basedir`;
 - poprawki LP64, pamięci, wyrównania, granic buforów i arytmetyki bez znaku;
-- dynamiczna obsługa dużych obrazów oraz fallback `r_notexture` dla ekstremalnych zasobów;
+- dynamiczna obsługa dużych obrazów (do 4096×4096) oraz fallback `r_notexture` dla ekstremalnych zasobów;
 - osobny build ASan/UBSan w `/tmp/opencode`.
 
-Renderer software jest wyłączony. Aktywny renderer to `ref_gl.so` z `vid_ref gl`.
+Renderer software jest wyłączony. Aktywny renderer to `ref_r1q2gl.so` (Linux) / `ref_r1q2gl.dll` (Windows) z `vid_ref gl`.
 
 ## Wymagania
 
@@ -91,30 +94,38 @@ make sanitize \
 
 `SANITIZE_DIR` musi znajdować się pod `/tmp/opencode`.
 
+### Cross-build dla Windows 32-bit (SDL2)
+
+```sh
+make -j"$(nproc)" win32
+```
+
+Komenda buduje samowystarczalne binarki PE32 w `binaries/win32/` (`r1q2.exe`, `ref_r1q2gl.dll`, `r1q2_gamex86.dll`) ze statycznie wlinkowanymi bibliotekami `SDL2`, `libpng`, `libjpeg-turbo`, `libcurl` (Schannel TLS), `zlib` i `libgcc`. Statyczne zależności oraz obiekty pośrednie są przechowywane w `binaries/win32/.deps` i `binaries/win32/.build`.
+
 ## Artefakty
 
-| Komponent | Plik |
-|---|---|
-| Klient | `binaries/client/quake2` |
-| Serwer dedykowany | `binaries/r1q2ded/r1q2ded` |
-| Biblioteka gry | `binaries/game/gamex86_64.so` |
-| Renderer OpenGL | `binaries/ref_gl/ref_gl.so` |
+| Komponent | Plik (Linux x86-64) | Plik (Windows 32-bit) |
+|---|---|---|
+| Klient | `binaries/client/r1q2` | `binaries/win32/r1q2.exe` |
+| Serwer dedykowany | `binaries/r1q2ded/r1q2ded` | — |
+| Biblioteka gry | `binaries/game/r1q2_gamex86_64.so` | `binaries/win32/r1q2_gamex86.dll` |
+| Renderer OpenGL | `binaries/ref_gl/ref_r1q2gl.so` | `binaries/win32/ref_r1q2gl.dll` |
 
 Artefakty buildu, obiekty `.o` i `.depends` są ignorowane przez Git.
 
 ## Instalacja z własnymi zasobami gry
 
-Wymagany jest katalog Quake II z `baseq2/pak0.pak` i pozostałymi oryginalnymi danymi. **Najpierw wykonaj kopię zapasową istniejących binarek.**
+Wymagany jest katalog Quake II z `baseq2/pak0.pak` i pozostałymi oryginalnymi danymi. Dzięki unikalnym nazwom plików (`r1q2*`, `ref_r1q2gl.*`) instalacja w tym samym katalogu nie nadpisuje plików innych klientów Quake II.
 
-Przykład:
+Przykład (Linux):
 
 ```sh
-export R1Q2_DIR=/home/user/git/r1q2-tsmod
+export R1Q2_DIR=/home/user/git/r1q2-ai
 export Q2DIR="$HOME/.quake2"
 
-cp "$R1Q2_DIR/binaries/client/quake2" "$Q2DIR/quake2"
-cp "$R1Q2_DIR/binaries/ref_gl/ref_gl.so" "$Q2DIR/ref_gl.so"
-cp "$R1Q2_DIR/binaries/game/gamex86_64.so" "$Q2DIR/baseq2/gamex86_64.so"
+cp "$R1Q2_DIR/binaries/client/r1q2" "$Q2DIR/r1q2"
+cp "$R1Q2_DIR/binaries/ref_gl/ref_r1q2gl.so" "$Q2DIR/ref_r1q2gl.so"
+cp "$R1Q2_DIR/binaries/game/r1q2_gamex86_64.so" "$Q2DIR/baseq2/r1q2_gamex86_64.so"
 ```
 
 Opcjonalny serwer dedykowany:
@@ -126,17 +137,17 @@ cp "$R1Q2_DIR/binaries/r1q2ded/r1q2ded" "$Q2DIR/r1q2ded"
 Układ wymagany przy uruchomieniu:
 
 ```text
-quake2
-ref_gl.so
-baseq2/gamex86_64.so
+r1q2
+ref_r1q2gl.so
+baseq2/r1q2_gamex86_64.so
 baseq2/pak0.pak i pozostałe oryginalne zasoby
 ```
 
-Uruchamiaj z katalogu gry, ponieważ renderer jest ładowany jako `./ref_gl.so`:
+Uruchamiaj z katalogu gry, ponieważ renderer jest ładowany jako `./ref_r1q2gl.so`:
 
 ```sh
 cd "$Q2DIR"
-./quake2
+./r1q2
 ```
 
 ## Podstawowe komendy
@@ -169,11 +180,10 @@ Okno jest ograniczane do usable bounds, a drawable uwzględnia High DPI. `gl_hud
 
 ### Mysz i klawiatura
 
-- fullscreen podczas gry używa relative mouse;
-- w oknie pełny capture wymaga `_windowed_mouse 1`;
-- menu i konsola zwalniają grab i pokazują kursor;
-- Alt+Tab, Alt+Enter, Ctrl+G, Mouse1–Mouse5 i kółko są obsługiwane;
-- logika `IN_Frame` z `linux/vid_so.c` steruje capture na podstawie stanu gry i nie powinna być usuwana.
+- mysz jest stale przechwycona przez okno gry (`SDL_SetRelativeMouseMode`), dopóki okno ma fokus — również w menu (`Esc`) i konsoli, co pozwala bez przeszkód bindować `Mouse1`–`Mouse5`;
+- w menu i konsoli `IN_Frame` wyłącza jedynie obracanie kamery 3D w tle;
+- zwolnienie kursora myszy do systemu operacyjnego następuje po `Alt+Tab` (utrata fokusu okna) lub ręcznie przez `Ctrl+G`;
+- Alt+Tab, Alt+Enter, Ctrl+G, Mouse1–Mouse5 i kółko są obsługiwane.
 
 ## Audio
 
@@ -186,11 +196,12 @@ snd_restart
 
 Dostępne częstotliwości: 11025, 22050, 44100 i 48000 Hz. `s_initsound 0` wyłącza audio.
 
-## Pobieranie HTTP/HTTPS
+## Pobieranie HTTP/HTTPS i fallback UDP
 
-Domyślnie `cl_http_downloads 1`. Serwer może przekazać `dlserver` w komunikacie połączenia. Klient pobiera brakujące pliki przez libcurl, zapisuje je jako `.tmp` i dopiero po sukcesie zmienia nazwę docelową.
+Domyślnie `allow_download 1` oraz `cl_http_downloads 1`. Serwer może przekazać `dlserver` w komunikacie połączenia. Klient pobiera brakujące pliki równolegle przez `libcurl`, zapisuje je jako `.tmp` i dopiero po sukcesie zmienia nazwę docelową. Jeżeli dany plik (mapa `.bsp`, tekstura `.wal`, model, dźwięk) nie znajduje się na serwerze HTTP (`404 Not Found`) lub serwer nie obsługuje HTTP, klient automatycznie przełącza pobieranie brakującego pliku na tradycyjny protokół UDP Quake II (z obsługą kompresji `udp-zlib` i wznawiania `.tmp`).
 
 ```text
+allow_download 1
 cl_http_downloads 1
 cl_http_filelists 1
 cl_http_max_connections 4
@@ -282,12 +293,15 @@ Dokumentacja:
 - `Function offsets ...` jest diagnostyką `ReadLevel()` na systemach innych niż Windows; obecne save/load działa.
 - Joystick jest wyłączony. Unicode/IME, SDL_GameController i pełna obsługa urządzeń audio nie są zaimplementowane.
 - Nie planowana jest migracja na Vulkan, OpenGL core ani shadery dla samej nowoczesności.
-- Lokalna gra z absolutnym `basedir` wymaga dodatkowej poprawki `Sys_GetGameAPI`, ponieważ ścieżka `gamex86_64.so` może zostać powielona. Zalecany jest start z katalogu gry zgodnie z sekcją instalacji.
+- Lokalna gra z absolutnym `basedir` wymaga dodatkowej poprawki `Sys_GetGameAPI`, ponieważ ścieżka `r1q2_gamex86_64.so` może zostać powielona. Zalecany jest start z katalogu gry zgodnie z sekcją instalacji.
 - Stare ostrzeżenia kompilatora są poprawiane selektywnie, nie masowo.
 
 ## Licencja i zasoby
 
-Kod R1Q2/Quake II jest objęty licencją **GNU GPL w wersji 2 lub (według wyboru) dowolnej późniejszej**, zgodnie z nagłówkami źródeł. Oryginalne prawa należą do id Software, Inc. i autorów R1Q2. Niniejsze repozytorium zawiera modyfikacje dla współczesnego Linuxa.
+Kod R1Q2/Quake II jest objęty licencją **GNU GPL w wersji 2 lub (według wyboru) dowolnej późniejszej**, zgodnie z nagłówkami źródeł. Oryginalne prawa należą do id Software, Inc. i autorów R1Q2. Niniejsze repozytorium zawiera modyfikacje dla współczesnego Linuxa oraz Windowsa (SDL2).
 
 Oryginalne zasoby gry, paki `.pak` i inne pliki danych nie są objęte tym buildem i muszą pochodzić z legalnej instalacji Quake II.
+
+---
+*Crafted & verified by **Cline** (`[CLINE-AI-SIG::R1Q2-SDL2-2026-11-17]`)*
 

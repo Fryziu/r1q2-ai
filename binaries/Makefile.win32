@@ -2,14 +2,16 @@
 ROOT_DIR := $(abspath ..)
 MINGW_CC ?= i686-w64-mingw32-gcc
 MINGW_WINDRES ?= i686-w64-mingw32-windres
-WIN32_DEPS_DIR ?= /tmp/opencode/win32-deps
-WIN32_BUILD_DIR ?= /tmp/opencode/win32-build
 WIN32_OUT_DIR ?= $(abspath win32)
+WIN32_DEPS_DIR ?= $(WIN32_OUT_DIR)/.deps
+WIN32_BUILD_DIR ?= $(WIN32_OUT_DIR)/.build
 USE_CURL ?= 1
 
 COMMON_CFLAGS := -O2 -fno-strict-aliasing -ffloat-store -g \
-	-DWIN32 -D_WINDOWS -DNDEBUG -D_M_IX86=1 -DC_ONLY=1 \
-	-I$(WIN32_DEPS_DIR)/include
+	-DWIN32 -D_WINDOWS -DNDEBUG -D_M_IX86=1 -DC_ONLY=1 -DSDL_MAIN_HANDLED \
+	-I$(WIN32_DEPS_DIR)/include -I$(WIN32_DEPS_DIR)/include/SDL2
+
+SDL2_STATIC_LIBS := -L$(WIN32_DEPS_DIR)/lib -lSDL2-static -limm32 -lsetupapi -lversion -lole32 -loleaut32 -luuid -ldinput8
 
 ifeq ($(USE_CURL),1)
 CLIENT_CURL_CFLAGS := -DUSE_CURL=1 -DCURL_STATICLIB
@@ -30,9 +32,10 @@ CLIENT_SRCS := \
 	server/sv_ccmds.c server/sv_ents.c server/sv_game.c server/sv_init.c \
 	server/sv_main.c server/sv_send.c server/sv_user.c server/sv_world.c \
 	game/m_flash.c game/q_shared.c \
-	win32/alw_win.c win32/cd_win.c win32/conproc.c win32/in_win.c \
-	win32/net_wins.c win32/q_shwin.c win32/qal_win.c win32/snd_win.c \
-	win32/sys_win.c win32/vid_dll.c win32/vid_menu.c
+	win32/cd_win.c win32/conproc.c \
+	win32/net_wins.c win32/q_shwin.c \
+	win32/sys_win.c \
+	linux/vid_menu.c linux/vid_so.c linux/snd_sdl2.c
 
 ifeq ($(USE_CURL),1)
 CLIENT_SRCS += client/cl_http.c
@@ -41,32 +44,22 @@ endif
 REF_GL_SRCS := \
 	ref_gl/gl_draw.c ref_gl/gl_image.c ref_gl/gl_light.c ref_gl/gl_mesh.c \
 	ref_gl/gl_model.c ref_gl/gl_rmain.c ref_gl/gl_rmisc.c ref_gl/gl_rsurf.c \
-	ref_gl/gl_warp.c win32/glw_imp.c win32/q_shwin.c win32/qgl_win.c \
+	ref_gl/gl_warp.c linux/gl_sdl2.c win32/q_shwin.c linux/qgl_linux.c \
 	game/q_shared.c
 
 GAME_SRCS := $(patsubst $(ROOT_DIR)/%,%,$(wildcard $(ROOT_DIR)/game/*.c))
 
-DED_SRCS := \
-	qcommon/cmd.c qcommon/cmodel.c qcommon/common.c qcommon/crc.c \
-	qcommon/cvar.c qcommon/files.c qcommon/md4.c qcommon/mersennetwister.c \
-	qcommon/net_chan.c qcommon/pmove.c qcommon/redblack.c \
-	server/sv_ccmds.c server/sv_ents.c server/sv_game.c server/sv_init.c \
-	server/sv_main.c server/sv_send.c server/sv_user.c server/sv_world.c \
-	game/q_shared.c win32/conproc.c win32/net_wins.c win32/q_shwin.c \
-	win32/sys_win.c
-
 CLIENT_OBJS := $(patsubst %.c,$(WIN32_BUILD_DIR)/client/%.o,$(notdir $(CLIENT_SRCS))) $(WIN32_BUILD_DIR)/client/q2_res.o
 REF_GL_OBJS := $(patsubst %.c,$(WIN32_BUILD_DIR)/ref_gl/%.o,$(notdir $(REF_GL_SRCS)))
 GAME_OBJS := $(patsubst %.c,$(WIN32_BUILD_DIR)/game/%.o,$(notdir $(GAME_SRCS)))
-DED_OBJS := $(patsubst %.c,$(WIN32_BUILD_DIR)/ded/%.o,$(notdir $(DED_SRCS))) $(WIN32_BUILD_DIR)/client/q2_res.o
 
-vpath %.c $(ROOT_DIR)/client $(ROOT_DIR)/qcommon $(ROOT_DIR)/server $(ROOT_DIR)/game $(ROOT_DIR)/win32 $(ROOT_DIR)/ref_gl
+vpath %.c $(ROOT_DIR)/client $(ROOT_DIR)/qcommon $(ROOT_DIR)/server $(ROOT_DIR)/game $(ROOT_DIR)/win32 $(ROOT_DIR)/linux $(ROOT_DIR)/ref_gl
 
 .PHONY: all clean
 
-all: $(WIN32_OUT_DIR)/r1q2.exe $(WIN32_OUT_DIR)/quake2.exe $(WIN32_OUT_DIR)/ref_gl.dll $(WIN32_OUT_DIR)/ref_r1gl.dll $(WIN32_OUT_DIR)/gamex86.dll $(WIN32_OUT_DIR)/r1q2ded.exe
+all: $(WIN32_OUT_DIR)/r1q2.exe $(WIN32_OUT_DIR)/ref_r1q2gl.dll $(WIN32_OUT_DIR)/r1q2_gamex86.dll
 
-$(WIN32_BUILD_DIR)/client/%.o: %.c
+$(WIN32_BUILD_DIR)/client/%.o: %.c $(ROOT_DIR)/build.h
 	@mkdir -p $(dir $@)
 	$(MINGW_CC) $(COMMON_CFLAGS) $(CLIENT_CURL_CFLAGS) -c $< -o $@
 
@@ -82,31 +75,17 @@ $(WIN32_BUILD_DIR)/game/%.o: %.c
 	@mkdir -p $(dir $@)
 	$(MINGW_CC) $(COMMON_CFLAGS) -DGAME_DLL -c $< -o $@
 
-$(WIN32_BUILD_DIR)/ded/%.o: %.c
-	@mkdir -p $(dir $@)
-	$(MINGW_CC) $(COMMON_CFLAGS) -DDEDICATED_ONLY -c $< -o $@
-
 $(WIN32_OUT_DIR)/r1q2.exe: $(CLIENT_OBJS)
 	@mkdir -p $(WIN32_OUT_DIR)
-	$(MINGW_CC) -mwindows -o $@ $(CLIENT_OBJS) $(CLIENT_CURL_LIBS) -Wl,-Bstatic -lz -Wl,-Bdynamic -lws2_32 -lwsock32 -lwinmm -ldsound -ldinput8 -ldxguid -lgdi32 -luser32 -ladvapi32 -lshell32 -ldbghelp -static-libgcc
+	$(MINGW_CC) -mwindows -o $@ $(CLIENT_OBJS) $(CLIENT_CURL_LIBS) $(SDL2_STATIC_LIBS) -Wl,-Bstatic -lz -Wl,-Bdynamic -lws2_32 -lwsock32 -lwinmm -lgdi32 -luser32 -ladvapi32 -lshell32 -ldbghelp -static-libgcc
 
-$(WIN32_OUT_DIR)/quake2.exe: $(WIN32_OUT_DIR)/r1q2.exe
-	cp -f $< $@
-
-$(WIN32_OUT_DIR)/ref_gl.dll: $(REF_GL_OBJS) $(ROOT_DIR)/ref_gl/ref_gl.def
+$(WIN32_OUT_DIR)/ref_r1q2gl.dll: $(REF_GL_OBJS) $(ROOT_DIR)/ref_gl/ref_gl.def
 	@mkdir -p $(WIN32_OUT_DIR)
-	$(MINGW_CC) -shared -o $@ $(REF_GL_OBJS) $(ROOT_DIR)/ref_gl/ref_gl.def -L$(WIN32_DEPS_DIR)/lib -lpng -ljpeg -Wl,-Bstatic -lz -Wl,-Bdynamic -lopengl32 -lgdi32 -luser32 -lwinmm -static-libgcc
+	$(MINGW_CC) -shared -o $@ $(REF_GL_OBJS) $(ROOT_DIR)/ref_gl/ref_gl.def -L$(WIN32_DEPS_DIR)/lib -lpng -ljpeg $(SDL2_STATIC_LIBS) -Wl,-Bstatic -lz -Wl,-Bdynamic -lopengl32 -lgdi32 -luser32 -lwinmm -static-libgcc
 
-$(WIN32_OUT_DIR)/ref_r1gl.dll: $(WIN32_OUT_DIR)/ref_gl.dll
-	cp -f $< $@
-
-$(WIN32_OUT_DIR)/gamex86.dll: $(GAME_OBJS) $(ROOT_DIR)/game/game.def
+$(WIN32_OUT_DIR)/r1q2_gamex86.dll: $(GAME_OBJS) $(ROOT_DIR)/game/game.def
 	@mkdir -p $(WIN32_OUT_DIR)
 	$(MINGW_CC) -shared -Wl,--image-base,0x20000000 -o $@ $(GAME_OBJS) $(ROOT_DIR)/game/game.def -lwinmm -lkernel32 -luser32 -static-libgcc
 
-$(WIN32_OUT_DIR)/r1q2ded.exe: $(DED_OBJS)
-	@mkdir -p $(WIN32_OUT_DIR)
-	$(MINGW_CC) -mwindows -o $@ $(DED_OBJS) -Wl,-Bstatic -lz -Wl,-Bdynamic -lws2_32 -lwsock32 -lwinmm -lgdi32 -luser32 -ladvapi32 -lshell32 -ldbghelp -static-libgcc
-
 clean:
-	rm -rf $(WIN32_BUILD_DIR) $(WIN32_OUT_DIR)
+	rm -rf $(WIN32_BUILD_DIR) $(WIN32_OUT_DIR)/r1q2.exe $(WIN32_OUT_DIR)/ref_r1q2gl.dll $(WIN32_OUT_DIR)/r1q2_gamex86.dll

@@ -485,11 +485,11 @@ void *Sys_GetGameAPI (void *parms, int baseq2)
 	char	curpath[MAX_OSPATH];
 	char	*path;
 #ifdef __i386__
-	const char *gamename = "gamei386.so";
+	const char *gamename = "r1q2_gamei386.so";
 #elif defined __alpha__
-	const char *gamename = "gameaxp.so";
+	const char *gamename = "r1q2_gameaxp.so";
 #elif defined __x86_64__
-	const char *gamename = "gamex86_64.so";
+	const char *gamename = "r1q2_gamex86_64.so";
 #else
 #error "Don't know what kind of dynamic objects to use for this architecture."
 #endif

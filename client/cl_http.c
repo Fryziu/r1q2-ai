@@ -387,7 +387,7 @@ Init libcurl and multi handle.
 */
 void CL_InitHTTPDownloads (void)
 {
-	if (curl_global_init (CURL_GLOBAL_NOTHING) != CURLE_OK)
+	if (curl_global_init (CURL_GLOBAL_DEFAULT) != CURLE_OK)
 	{
 		httpDown = true;
 		Com_Printf ("curl_global_init failed; HTTP downloading disabled.\n", LOG_CLIENT | LOG_WARNING);
@@ -492,10 +492,73 @@ void CL_CancelHTTPDownloads (qboolean permKill)
 			q->state = DLQ_STATE_DONE;
 	}
 
-	if (!pendingCount && !handleCount && abortDownloads == HTTPDL_ABORT_HARD)
-		cls.downloadServer[0] = 0;
+	if (!pendingCount && !handleCount)
+	{
+		if (abortDownloads == HTTPDL_ABORT_HARD)
+			cls.downloadServer[0] = 0;
+		else if (abortDownloads == HTTPDL_ABORT_SOFT)
+			abortDownloads = HTTPDL_ABORT_NONE;
+	}
 
 	pendingCount = 0;
+}
+
+/*
+===============
+CL_ResetHTTPQueue
+
+Reset the HTTP download queue between map changes (soft reconnects)
+while keeping the current downloadServer URL active.
+===============
+*/
+void CL_ResetHTTPQueue (void)
+{
+	dlqueue_t	*q, *last;
+	int			i;
+
+	if (!cls.downloadServer[0])
+		return;
+
+	for (i = 0; i < 4; i++)
+	{
+		dlhandle_t *dl = &cls.HTTPHandles[i];
+
+		if (dl->file)
+		{
+			fclose (dl->file);
+			remove (dl->filePath);
+			dl->file = NULL;
+		}
+
+		if (dl->tempBuffer)
+		{
+			Z_Free (dl->tempBuffer);
+			dl->tempBuffer = NULL;
+		}
+
+		if (dl->curl && multi)
+			curl_multi_remove_handle (multi, dl->curl);
+
+		dl->queueEntry = NULL;
+	}
+
+	q = &cls.downloadQueue;
+	last = NULL;
+	while (q->next)
+	{
+		q = q->next;
+		if (last)
+			Z_Free (last);
+		last = q;
+	}
+	if (last)
+		Z_Free (last);
+
+	memset (&cls.downloadQueue, 0, sizeof(cls.downloadQueue));
+	abortDownloads = HTTPDL_ABORT_NONE;
+	handleCount = 0;
+	pendingCount = 0;
+	downloading_pak = false;
 }
 
 /*
@@ -535,7 +598,11 @@ qboolean CL_QueueHTTPDownload (const char *quakePath)
 
 		//avoid sending duplicate requests
 		if (!strcmp (quakePath, q->quakePath))
+		{
+			if (q->state == DLQ_STATE_DONE)
+				return false;
 			return true;
+		}
 	}
 
 	q->next = Z_TagMalloc (sizeof(*q), TAGMALLOC_CLIENT_DOWNLOAD);
@@ -1017,6 +1084,7 @@ static void CL_FinishHTTPDownload (void)
 			//rename the temp file
 			Com_sprintf (tempName, sizeof(tempName), "%s/%s", FS_Gamedir(), dl->queueEntry->quakePath);
 
+			remove (tempName);
 			if (rename (dl->filePath, tempName))
 				Com_Printf ("Failed to rename %s for some odd reason...", LOG_CLIENT|LOG_ERROR, dl->filePath);
 

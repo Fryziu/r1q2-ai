@@ -4,9 +4,15 @@
 #define SO_FILE "/etc/quake2.conf"
 
 #include <assert.h>
+#ifdef _WIN32
+#include <windows.h>
+#define Sys_LoadSymbol(lib, sym) ((void *)GetProcAddress((HMODULE)(lib), (sym)))
+#else
 #include <dlfcn.h> // ELF dl loader
 #include <sys/stat.h>
 #include <unistd.h>
+#define Sys_LoadSymbol(lib, sym) dlsym((lib), (sym))
+#endif
 #include <errno.h>
 
 #include <SDL.h>
@@ -46,6 +52,9 @@ void (*KBD_Update_fp)(void);
 void (*KBD_Init_fp)(Key_Event_fp_t fp);
 void (*KBD_Close_fp)(void);
 
+int (*RW_VID_GetNumDisplays_fp)(void);
+int (*RW_VID_GetDisplayMode_fp)(int display_index, int *width, int *height, const char **name);
+
 /** MOUSE *****************************************************************/
 
 in_state_t in_state;
@@ -68,7 +77,7 @@ DLL GLUE
 */
 
 #define	MAXPRINTMSG	4096
-void VID_Printf (int print_level, const char *fmt, ...)
+void EXPORT VID_Printf (int print_level, const char *fmt, ...)
 {
 	va_list		argptr;
 	char		msg[MAXPRINTMSG];
@@ -85,7 +94,7 @@ void VID_Printf (int print_level, const char *fmt, ...)
 		Com_DPrintf ("%s", msg);
 }
 
-void VID_Error (int err_level, const char *fmt, ...)
+void EXPORT VID_Error (int err_level, const char *fmt, ...)
 {
 	va_list		argptr;
 	char		msg[MAXPRINTMSG];
@@ -147,11 +156,12 @@ vidmode_t vid_modes[] =
 	{ "Mode 16: 3840x2160", 3840, 2160, 16 }
 };
 
-qboolean VID_GetModeInfo(unsigned int *width, unsigned int *height, int mode)
+qboolean EXPORT VID_GetModeInfo(unsigned int *width, unsigned int *height, int mode)
 {
 	SDL_DisplayMode display_mode;
 	int display_index;
 	int display_count;
+	int mode_w, mode_h;
 
 	if (mode == -1)
 	{
@@ -170,21 +180,29 @@ qboolean VID_GetModeInfo(unsigned int *width, unsigned int *height, int mode)
 
 	if (mode == -2)
 	{
-		display_count = SDL_GetNumVideoDisplays ();
+		display_count = RW_VID_GetNumDisplays_fp ? RW_VID_GetNumDisplays_fp () : SDL_GetNumVideoDisplays ();
 		display_index = vid_display ? vid_display->intvalue : 0;
 		if (display_index < 0 || display_index >= display_count)
 			display_index = 0;
 
-		if (SDL_GetCurrentDisplayMode (display_index, &display_mode) == 0)
+		if (RW_VID_GetDisplayMode_fp)
+		{
+			if (RW_VID_GetDisplayMode_fp (display_index, &mode_w, &mode_h, NULL) == 0 && mode_w > 0 && mode_h > 0)
+			{
+				*width = (unsigned int)mode_w;
+				*height = (unsigned int)mode_h;
+				return true;
+			}
+		}
+		else if (SDL_GetCurrentDisplayMode (display_index, &display_mode) == 0)
 		{
 			*width = display_mode.w;
 			*height = display_mode.h;
+			return true;
 		}
-		else
-		{
-			*width = 800;
-			*height = 600;
-		}
+
+		*width = 800;
+		*height = 600;
 		return true;
 	}
 
@@ -202,7 +220,7 @@ qboolean VID_GetModeInfo(unsigned int *width, unsigned int *height, int mode)
 /*
 ** VID_NewWindow
 */
-void VID_NewWindow ( int width, int height)
+void EXPORT VID_NewWindow ( int width, int height)
 {
 	viddef.width  = width;
 	viddef.height = height;
@@ -217,12 +235,18 @@ void VID_FreeReflib (void)
 			KBD_Close_fp();
 		if (RW_IN_Shutdown_fp)
 			RW_IN_Shutdown_fp();
+#ifdef _WIN32
+		FreeLibrary((HMODULE)reflib_library);
+#else
 		dlclose(reflib_library);
+#endif
 	}
 
 	KBD_Init_fp = NULL;
 	KBD_Update_fp = NULL;
 	KBD_Close_fp = NULL;
+	RW_VID_GetNumDisplays_fp = NULL;
+	RW_VID_GetDisplayMode_fp = NULL;
 	RW_IN_Init_fp = NULL;
 	RW_IN_Shutdown_fp = NULL;
 	RW_IN_Activate_fp = NULL;
@@ -276,6 +300,14 @@ qboolean VID_LoadRefresh( char *name )
 		fn[strlen(fn) - 1] = 0;
 	*/
 
+#ifdef _WIN32
+	Q_strncpy (fn, name, sizeof(fn)-1);
+	if ( ( reflib_library = (void *)LoadLibrary( fn ) ) == 0 )
+	{
+		Com_Printf( "LoadLibrary(\"%s\") failed (%lu)\n", LOG_CLIENT, name, (unsigned long)GetLastError());
+		return false;
+	}
+#else
 	strcpy (fn, ".");
 	strcat(fn, "/");
 	strcat(fn, name);
@@ -308,6 +340,7 @@ qboolean VID_LoadRefresh( char *name )
 		Com_Printf( "LoadLibrary(\"%s\") failed: %s\n", LOG_CLIENT, name , dlerror());
 		return false;
 	}
+#endif
 
 	ri.Cmd_AddCommand = Cmd_AddCommand;
 	ri.Cmd_RemoveCommand = Cmd_RemoveCommand;
@@ -333,10 +366,10 @@ qboolean VID_LoadRefresh( char *name )
 	
 	rx.APIVersion = EXTENDED_API_VERSION;
 
-	if ( ( GetRefAPI = (void *) dlsym( reflib_library, "GetRefAPI" ) ) == 0 )
+	if ( ( GetRefAPI = (GetRefAPI_t) Sys_LoadSymbol( reflib_library, "GetRefAPI" ) ) == 0 )
 		Com_Error( ERR_FATAL, "dlsym failed on %s", name );
 
-	if ( ( GetExtraAPI = (GetExtraAPI_t) dlsym( reflib_library, "GetExtraAPI" ) ) == 0 )
+	if ( ( GetExtraAPI = (GetExtraAPI_t) Sys_LoadSymbol( reflib_library, "GetExtraAPI" ) ) == 0 )
 	{
 		Com_DPrintf ("No ExtraAPI found.\n");
 	} else {
@@ -346,7 +379,9 @@ qboolean VID_LoadRefresh( char *name )
 	}
 
 	re = GetRefAPI( ri );
-	re_DrawCrosshair = (DrawCrosshair_t) dlsym( reflib_library, "Draw_Crosshair" );
+	re_DrawCrosshair = (DrawCrosshair_t) Sys_LoadSymbol( reflib_library, "Draw_Crosshair" );
+	RW_VID_GetNumDisplays_fp = (int (*)(void)) Sys_LoadSymbol( reflib_library, "RW_VID_GetNumDisplays" );
+	RW_VID_GetDisplayMode_fp = (int (*)(int, int *, int *, const char **)) Sys_LoadSymbol( reflib_library, "RW_VID_GetDisplayMode" );
 
 	if (re.api_version != API_VERSION)
 	{
@@ -360,12 +395,12 @@ qboolean VID_LoadRefresh( char *name )
 	in_state.viewangles = cl.viewangles;
 	in_state.in_strafe_state = &in_strafe.state;
 
-	if ((RW_IN_Init_fp = dlsym(reflib_library, "RW_IN_Init")) == NULL ||
-		(RW_IN_Shutdown_fp = dlsym(reflib_library, "RW_IN_Shutdown")) == NULL ||
-		(RW_IN_Activate_fp = dlsym(reflib_library, "RW_IN_Activate")) == NULL ||
-		(RW_IN_Commands_fp = dlsym(reflib_library, "RW_IN_Commands")) == NULL ||
-		(RW_IN_Move_fp = dlsym(reflib_library, "RW_IN_Move")) == NULL ||
-		(RW_IN_Frame_fp = dlsym(reflib_library, "RW_IN_Frame")) == NULL)
+	if ((RW_IN_Init_fp = Sys_LoadSymbol(reflib_library, "RW_IN_Init")) == NULL ||
+		(RW_IN_Shutdown_fp = Sys_LoadSymbol(reflib_library, "RW_IN_Shutdown")) == NULL ||
+		(RW_IN_Activate_fp = Sys_LoadSymbol(reflib_library, "RW_IN_Activate")) == NULL ||
+		(RW_IN_Commands_fp = Sys_LoadSymbol(reflib_library, "RW_IN_Commands")) == NULL ||
+		(RW_IN_Move_fp = Sys_LoadSymbol(reflib_library, "RW_IN_Move")) == NULL ||
+		(RW_IN_Frame_fp = Sys_LoadSymbol(reflib_library, "RW_IN_Frame")) == NULL)
 		Sys_Error("No RW_IN functions in REF.\n");
 
 	Real_IN_Init();
@@ -379,9 +414,9 @@ qboolean VID_LoadRefresh( char *name )
 
 	/* Init KBD */
 #if 1
-	if ((KBD_Init_fp = dlsym(reflib_library, "KBD_Init")) == NULL ||
-		(KBD_Update_fp = dlsym(reflib_library, "KBD_Update")) == NULL ||
-		(KBD_Close_fp = dlsym(reflib_library, "KBD_Close")) == NULL)
+	if ((KBD_Init_fp = Sys_LoadSymbol(reflib_library, "KBD_Init")) == NULL ||
+		(KBD_Update_fp = Sys_LoadSymbol(reflib_library, "KBD_Update")) == NULL ||
+		(KBD_Close_fp = Sys_LoadSymbol(reflib_library, "KBD_Close")) == NULL)
 		Sys_Error("No KBD functions in REF.\n");
 #else
 	{
@@ -396,9 +431,11 @@ qboolean VID_LoadRefresh( char *name )
 #endif
 	KBD_Init_fp(Do_Key_Event);
 
+#ifndef _WIN32
 	// give up root now
 	setreuid(getuid(), getuid());
 	setegid(getgid());
+#endif
 
 	Com_Printf( "------------------------------------\n", LOG_CLIENT);
 	reflib_active = true;
@@ -418,7 +455,9 @@ void VID_ReloadRefresh (void)
 {
 	char name[100];
 
-	if ( Q_stricmp( vid_ref->string, "gl" ) != 0 )
+	if ( Q_stricmp( vid_ref->string, "gl" ) != 0 &&
+		 Q_stricmp( vid_ref->string, "r1gl" ) != 0 &&
+		 Q_stricmp( vid_ref->string, "r1q2gl" ) != 0 )
 	{
 		Com_Printf( "Only the OpenGL renderer is supported; using vid_ref gl.\n", LOG_CLIENT );
 		Cvar_Set( "vid_ref", "gl" );
@@ -440,7 +479,11 @@ void VID_ReloadRefresh (void)
 		cl.frame.valid = false;
 		cls.disable_screen = true;
 
-		strcpy( name, "ref_gl.so" );
+#ifdef _WIN32
+		strcpy( name, "ref_r1q2gl.dll" );
+#else
+		strcpy( name, "ref_r1q2gl.so" );
+#endif
 		if ( !VID_LoadRefresh( name ) )
 			Com_Error (ERR_FATAL, "Couldn't load OpenGL renderer %s", name);
 
@@ -554,6 +597,12 @@ void IN_Activate (qboolean active)
 {
 	if (RW_IN_Activate_fp)
 		RW_IN_Activate_fp(active);
+}
+
+void IN_Restart_f (void)
+{
+	IN_Shutdown ();
+	Real_IN_Init ();
 }
 
 void Do_Key_Event(int key, qboolean down)

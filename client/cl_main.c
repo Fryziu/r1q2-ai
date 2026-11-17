@@ -2596,6 +2596,8 @@ const char *colortext(const char *text)
 	return ctext[c];
 }
 
+void CL_ResetLastDownloadFilename (void);
+
 void CL_ResetPrecacheCheck (void)
 {
 	precache_start_time = Sys_Milliseconds();
@@ -2603,6 +2605,7 @@ void CL_ResetPrecacheCheck (void)
 	precache_check = CS_MODELS;
 	precache_model = 0;
 	precache_model_skin = -1;
+	CL_ResetLastDownloadFilename ();
 }
 
 void CL_RequestNextDownload (void)
@@ -3050,6 +3053,15 @@ skipplayer:;
 	{
 		char locbuff[MAX_QPATH+4];
 		uint32 server_checksum;
+
+		if (allow_download->intvalue && allow_download_maps->intvalue &&
+			cl.configstrings[CS_MODELS+1][0] &&
+			FS_LoadFile (cl.configstrings[CS_MODELS+1], NULL) == -1)
+		{
+			if (!CL_CheckOrDownloadFile (cl.configstrings[CS_MODELS+1]))
+				return; // started a fallback UDP download for the map
+		}
+
 		precache_check = ENV_CNT + 1;
 
 		COM_StripExtension (cl.configstrings[CS_MODELS+1], locbuff);
@@ -3120,7 +3132,8 @@ skipplayer:;
 					return; // started a download
 			}
 		}
-		precache_check = TEXTURE_CNT+999;
+		precache_check = TEXTURE_CNT+2;
+		precache_tex = 0;
 	}
 
 	//pending downloads (possibly textures), let's wait here.
@@ -3128,6 +3141,21 @@ skipplayer:;
 	if (CL_PendingHTTPDownloads ())
 		return;
 #endif
+
+	// fallback to UDP for any map textures that returned HTTP 404
+	if (precache_check == TEXTURE_CNT+2) {
+		extern int			numtexinfo;
+		extern mapsurface_t	map_surfaces[];
+
+		if (allow_download->intvalue && allow_download_maps->intvalue) {
+			while (precache_tex < numtexinfo) {
+				Com_sprintf(fn, sizeof(fn), "textures/%s.wal", map_surfaces[precache_tex++].rname);
+				if (!CL_CheckOrDownloadFile(fn))
+					return; // started a fallback UDP download
+			}
+		}
+		precache_check = TEXTURE_CNT+999;
+	}
 
 //ZOID
 	CL_RegisterSounds ();
@@ -3922,10 +3950,8 @@ void CL_RefreshInputs (void)
 	// process new key events
 	Sys_SendKeyEvents ();
 
-#if (defined JOYSTICK) || (defined LINUX)
 	// process mice & joystick events
 	IN_Commands ();
-#endif
 
 	// process console commands
 	Cbuf_Execute ();
@@ -3977,9 +4003,7 @@ void CL_SendCommand_Synchronous (void)
 	Sys_SendKeyEvents ();
 
 	// allow mice or other external controllers to add commands
-#ifdef JOYSTICK
 	IN_Commands ();
-#endif
 
 	// process console commands
 	Cbuf_Execute ();

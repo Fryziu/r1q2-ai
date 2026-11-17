@@ -34,9 +34,9 @@ ALLSRC:=$(quake2_SRC)
 
 .PHONY: default
 
-default: quake2
+default: r1q2
 
-TARGETS:=quake2
+TARGETS:=r1q2
 
 include ../make.inc
 
@@ -51,5 +51,5 @@ LDFLAGS+=-lexecinfo
 endif
 
 
-quake2: $(quake2_OBJ)
+r1q2: $(quake2_OBJ)
 	$(CC) -g -o $@ $^ $(LDFLAGS)

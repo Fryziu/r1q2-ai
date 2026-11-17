@@ -8,11 +8,13 @@
  * of the License, or (at your option) any later version.
  */
 
+#ifndef _WIN32
 #include <unistd.h>
+#include <sys/mman.h>
+#endif
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/mman.h>
 
 #include <SDL.h>
 
@@ -165,11 +167,10 @@ static void UpdateMouseCapture (void)
 {
 	qboolean want_capture;
 
-	/* Capture gameplay in fullscreen; _windowed_mouse controls windowed play. */
-	want_capture = window_active && app_active && input_active && mouse_avail &&
-		!mouse_ungrab_requested &&
-		((window && (SDL_GetWindowFlags (window) & SDL_WINDOW_FULLSCREEN)) ||
-		(_windowed_mouse && FLOAT_NE_ZERO(_windowed_mouse->value)));
+	/* Keep mouse captured while the game window has focus (including menu/console);
+	 * release on Alt+Tab (focus loss) or explicit Ctrl+G ungrab. */
+	want_capture = window_active && app_active && mouse_avail &&
+		!mouse_ungrab_requested;
 
 	if (want_capture == mouse_active)
 		return;
@@ -208,6 +209,8 @@ static void HandleAppActive (qboolean active)
 		return;
 
 	app_active = active;
+	if (active)
+		mouse_ungrab_requested = false;
 	ResetMouseDeltas ();
 	UpdateMouseCapture ();
 
@@ -237,7 +240,7 @@ void EXPORT RW_IN_Init(in_state_t *in_state_p)
 {
 	in_state = in_state_p;
 
-	_windowed_mouse = ri.Cvar_Get ("_windowed_mouse", "0", CVAR_ARCHIVE);
+	_windowed_mouse = ri.Cvar_Get ("_windowed_mouse", "1", CVAR_ARCHIVE);
 	m_filter = ri.Cvar_Get ("m_filter", "0", 0);
 	in_mouse = ri.Cvar_Get ("in_mouse", "1", CVAR_ARCHIVE);
 #ifdef HAVE_JOYSTICK
@@ -414,10 +417,9 @@ void EXPORT RW_IN_Activate(qboolean active)
 
 	input_active = active;
 	ResetMouseDeltas ();
-	UpdateMouseCapture ();
-
-	if (window_active && app_active)
-		SDL_ShowCursor (active ? SDL_DISABLE : SDL_ENABLE);
+	if (window)
+		SDL_GetRelativeMouseState (&mx, &my);
+	ResetMouseDeltas ();
 }
 
 /*****************************************************************************/
@@ -1039,6 +1041,35 @@ void GLimp_AppActivate( qboolean active )
 	HandleAppActive (active);
 }
 
+int EXPORT RW_VID_GetNumDisplays( void )
+{
+	return SDL_GetNumVideoDisplays ();
+}
+
+int EXPORT RW_VID_GetDisplayMode( int display_index, int *width, int *height, const char **name )
+{
+	SDL_DisplayMode display_mode;
+
+	if (name)
+		*name = SDL_GetDisplayName (display_index);
+
+	if (SDL_GetCurrentDisplayMode (display_index, &display_mode) == 0)
+	{
+		if (width)
+			*width = display_mode.w;
+		if (height)
+			*height = display_mode.h;
+		return 0;
+	}
+
+	if (width)
+		*width = 0;
+	if (height)
+		*height = 0;
+	return -1;
+}
+
+#ifndef _WIN32
 void Sys_MakeCodeWriteable (unsigned long startaddr, unsigned long length)
 {
 	int r;
@@ -1050,6 +1081,7 @@ void Sys_MakeCodeWriteable (unsigned long startaddr, unsigned long length)
 	if (r < 0)
 		Sys_Error("Protection change failed\n");
 }
+#endif
 
 /*****************************************************************************/
 /* KEYBOARD PUBLIC INTERFACE                                                 */

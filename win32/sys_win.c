@@ -49,6 +49,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #endif
 
 #include "../win32/conproc.h"
+#include "../linux/rw_linux.h"
 
 int SV_CountPlayers (void);
 
@@ -68,9 +69,9 @@ cvar_t	*win_priority;
 qboolean s_win95;
 
 int			starttime;
-qboolean	ActiveApp;
+qboolean	ActiveApp = true;
 qboolean	Minimized;
-
+HWND		cl_hwnd;
 HWND		hwnd_Server;
 
 #ifndef NO_SERVER
@@ -1003,29 +1004,11 @@ Send Key_Event calls
 #ifndef DEDICATED_ONLY
 void Sys_SendKeyEvents (void)
 {
-	if (g_pKeyboard)
-	{
-		IN_ReadKeyboard ();
-	}
-	else
-	{
-		MSG        msg;
-
-		//Com_Printf ("sske\n", LOG_GENERAL);
-
-		//while (GetInputState())
-		while (PeekMessage (&msg, NULL, 0, 0, PM_REMOVE))
-		{
-			//if (GetMessage (&msg, NULL, 0, 0) == -1)
-				//Com_Quit ();
-			sys_msg_time = msg.time;
-      		TranslateMessage (&msg);
-      		DispatchMessage (&msg);
-		}
-	}
+	if (KBD_Update_fp)
+		KBD_Update_fp ();
 
 	// grab frame time 
-	sys_frame_time = timeGetTime();	// FIXME: should this be at start?
+	sys_frame_time = timeGetTime();
 }
 #endif
 
@@ -1074,8 +1057,11 @@ Sys_AppActivate
 void Sys_AppActivate (void)
 {
 #ifndef DEDICATED_ONLY
-	ShowWindow ( cl_hwnd, SW_RESTORE);
-	SetForegroundWindow ( cl_hwnd );
+	if (cl_hwnd)
+	{
+		ShowWindow ( cl_hwnd, SW_RESTORE);
+		SetForegroundWindow ( cl_hwnd );
+	}
 #endif
 }
 
@@ -1118,7 +1104,7 @@ void *Sys_GetGameAPI (void *parms, int baseq2DLL)
 	FILE	*newExists;
 
 #if defined _M_IX86
-	const char gamename[] = "gamex86.dll";
+	const char gamename[] = "r1q2_gamex86.dll";
 
 #ifdef NDEBUG
 	const char debugdir[] = "release";
@@ -1127,7 +1113,7 @@ void *Sys_GetGameAPI (void *parms, int baseq2DLL)
 #endif
 
 #elif defined _M_ALPHA
-	const char gamename[] = "gameaxp.dll";
+	const char gamename[] = "r1q2_gameaxp.dll";
 
 #ifdef NDEBUG
 	const char debugdir[] = "releaseaxp";
@@ -1137,7 +1123,7 @@ void *Sys_GetGameAPI (void *parms, int baseq2DLL)
 
 #elif defined _WIN64
 
-	const char gamename[] = "gamex86_64.dll";
+	const char gamename[] = "r1q2_gamex86_64.dll";
 
 #ifdef NDEBUG
 	const char debugdir[] = "release";
@@ -1990,7 +1976,7 @@ DWORD R1Q2ExceptionHandler (DWORD exceptionCode, LPEXCEPTION_POINTERS exceptionI
 			"cannot be fixed so you will continue to crash unless you use R1GL.";
 		wantUpload = FALSE;
 	}
-	else if (strstr (szModuleName, "r1q2.exe") || strstr (szModuleName, "ref_r1gl.dll") || strstr (szModuleName, "dedicated.exe"))
+	else if (strstr (szModuleName, "r1q2.exe") || strstr (szModuleName, "ref_r1q2gl.dll") || strstr (szModuleName, "ref_r1gl.dll") || strstr (szModuleName, "r1q2ded.exe") || strstr (szModuleName, "dedicated.exe"))
 	{
 #ifdef USE_CURL
 		gameMsg = 
@@ -2269,6 +2255,9 @@ void Sys_UpdateURLMenu (const char *s)
 	CHAR	title[80];
 	CHAR	*dots;
 
+	if (!cl_hwnd)
+		return;
+
 	GetSystemMenu (cl_hwnd, TRUE);
 
 	if (strlen (s) > 64)
@@ -2545,28 +2534,29 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 				spins = 0;
 				do
 				{
-					while (PeekMessage (&msg, NULL, 0, 0, PM_REMOVE))
+					if (dedicated->intvalue)
 					{
-						//if (GetMessage (&msg, NULL, 0, 0) == -1)
-						//	Com_Quit ();
-						sys_msg_time = msg.time;
-
-			#ifndef NO_SERVER
-						if (!hwnd_Server || !IsDialogMessage(hwnd_Server, &msg))
+						while (PeekMessage (&msg, NULL, 0, 0, PM_REMOVE))
 						{
-			#endif
-							TranslateMessage (&msg);
-   							DispatchMessage (&msg);
-			#ifndef NO_SERVER
+							sys_msg_time = msg.time;
+
+				#ifndef NO_SERVER
+							if (!hwnd_Server || !IsDialogMessage(hwnd_Server, &msg))
+							{
+				#endif
+								TranslateMessage (&msg);
+								DispatchMessage (&msg);
+				#ifndef NO_SERVER
+							}
+				#endif
 						}
-			#endif
 					}
 					newtime = Sys_Milliseconds ();
 					time = newtime - oldtime;
 					if (!time)
 						Sleep (0);
 					spins ++;
-				} while (0 && time < 1);
+				} while (time < 1);
 			}
 
 			if (spins > 500)

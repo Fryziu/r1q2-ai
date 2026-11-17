@@ -3269,7 +3269,11 @@ void SV_Init (void)
 	sv_enforcetime->help = "Enforce time movements to prevent speed hacking. Default 1.\n0: Disabled\n1: Enabled, prevent excess movement\n2+: Enabled, kick on excessive movement (increase value to reduce false positives from lag)\n";
 
 #ifndef NO_SERVER
+#ifdef DEDICATED_ONLY
 	allow_download = Cvar_Get ("allow_download", "0", CVAR_ARCHIVE);
+#else
+	allow_download = Cvar_Get ("allow_download", "1", CVAR_ARCHIVE);
+#endif
 	allow_download_players  = Cvar_Get ("allow_download_players", "1", CVAR_ARCHIVE);
 	allow_download_models = Cvar_Get ("allow_download_models", "1", CVAR_ARCHIVE);
 	allow_download_sounds = Cvar_Get ("allow_download_sounds", "1", CVAR_ARCHIVE);

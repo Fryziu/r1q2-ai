@@ -2,9 +2,9 @@
 
 Dokument roboczy projektu. Aktualizujemy go po każdym zakończonym etapie oraz po istotnych testach. Główna instrukcja użytkownika znajduje się w `README.md`.
 
-**Stan na:** 2026-11-16
-**Aktualny etap:** etap 9 zakończony — naprawiono `gl_hudscale` po `vid_restart`, dodano niezależne skalowanie celownika (`ch_scale`) i kontrolki `hud scale` / `crosshair scale` w menu Video; etap 8 (Windows 11) potwierdzony
-**Status:** cel osiągnięty — Linux x86_64 (SDL2 video/audio, HTTP, 3 monitory do 4K) oraz cross-build Windows 32-bit (`make win32`, Windows 11) potwierdzone przez użytkownika
+**Stan na:** 2026-11-17
+**Aktualny etap:** etap 10 zakończony — ujednolicono unikalne nazwy binarek (`r1q2`, `ref_r1q2gl`, `r1q2_game*`), zmigrowano klienta Windows 32-bit na wspólny backend SDL2 (obraz, menu Video, mysz, klawiatura, dźwięk) oraz naprawiono pobieranie HTTP z automatycznym fallbackiem do UDP Quake 2
+**Status:** cel osiągnięty — Linux x86_64 oraz Windows 32-bit SDL2 (`make win32`, Windows 11) przetestowane i potwierdzone przez użytkownika
 
 ## 1. Cel i sposób pracy
 
@@ -70,21 +70,21 @@ make -j"$(nproc)" sanitize
 
 Wyniki:
 
-- `binaries/client/quake2`
+- `binaries/client/r1q2`
 - `binaries/r1q2ded/r1q2ded`
-- `binaries/game/gamex86_64.so`
-- `binaries/ref_gl/ref_gl.so`
+- `binaries/game/r1q2_gamex86_64.so`
+- `binaries/ref_gl/ref_r1q2gl.so`
 
 Układ wymagany przy uruchomieniu z katalogu gry:
 
 ```text
-quake2
-ref_gl.so
-baseq2/gamex86_64.so
+r1q2
+ref_r1q2gl.so
+baseq2/r1q2_gamex86_64.so
 baseq2/pak0.pak i pozostałe oryginalne zasoby
 ```
 
-Renderer jest ładowany jako `./ref_gl.so`, dlatego katalog roboczy ma znaczenie.
+Renderer jest ładowany jako `./ref_r1q2gl.so`, dlatego katalog roboczy ma znaczenie.
 
 ## 4. Zakończony punkt startowy — SDL 1.2 / OpenGL
 
@@ -524,3 +524,28 @@ Nie wykonano commitów Git. Zmiany są zapisane w drzewie roboczym repozytorium.
 - Podczas testu uruchomieniowego ASan/UBSan wykryto i naprawiono przepełnienie bufora stosu w `Con_DrawConsole` (`client/console.c`: powiększono `version[24]` do `version[64]`) wynikające z błędu warunku przepełnienia w `Com_sprintf` (`game/q_shared.c`: `len == size` poprawiono na `len < 0 || len >= size` z bezpiecznym kopiowaniem `memcpy`).
 - Zweryfikowano czystym buildem release (`make distclean && make -j8`), buildem `make sanitize` oraz uruchomieniem i zrzutami ekranu pod ASan/UBSan (kod wyjścia 0).
 - Wykonano porządkowanie drzewa repozytorium: usunięto stare pliki projektowe VC6 (`.dsw`, `.dsp`, `.aps`, `qe3.ico`, `ref_gl/resource.h`), martwy 32-bitowy asembler `ref_soft`/DOS, wycofane backendy (`svgalib`, `rw_x11`, `gl_fxmesa`, `snd_linux`, `gl_sdl`, `al_linux`, `rw_ddraw`/`rw_dib`, `sv_null`, `m_rider.h`, `client_dll`) oraz nieaktualny cel `combine` z `Makefile`; przeniesiono oryginalne teksty R1Q2 do `docs/legacy/`, `EFFORT_REPORT.md` do `docs/` i uzupełniono `.gitignore`.
+- Ujednolicono i wyodrębniono nazwy artefaktów wykonywalnych i bibliotek dla Linuxa (`r1q2`, `r1q2ded`, `r1q2_gamex86_64.so`, `ref_r1q2gl.so`) oraz Windowsa (`r1q2.exe`, `ref_r1q2gl.dll`, `r1q2_gamex86.dll`), eliminując kolizje nazw z innymi klientami Quake II w tym samym katalogu gry.
+
+### 2026-11-17 — etap 10: unikalne nazwy binarek oraz migracja klienta Windows 32-bit na SDL2
+
+- Zmieniono nazwy budowanych i ładowanych plików na unikalne z prefiksem `r1q2`, aby wklejenie do katalogu Quake II nie nadpisywało innych klientów:
+  - Linux (`binaries/`): `binaries/client/r1q2`, `binaries/r1q2ded/r1q2ded`, `binaries/game/r1q2_gamex86_64.so`, `binaries/ref_gl/ref_r1q2gl.so`.
+  - Windows (`binaries/win32/`, bez serwera dedykowanego): `r1q2.exe`, `ref_r1q2gl.dll`, `r1q2_gamex86.dll`.
+- Przeniesiono klienta i renderer Windows 32-bit (`binaries/Makefile.win32`) na wspólny kod SDL2 używany na Linuksie:
+  - Wideo, okno, obsługa wielu monitorów, myszy i klawiatury: `linux/gl_sdl2.c` + `linux/qgl_linux.c` w `ref_r1q2gl.dll` oraz `linux/vid_so.c` + `linux/vid_menu.c` w `r1q2.exe`.
+  - Dźwięk: `linux/snd_sdl2.c` w `r1q2.exe` (16-bit stereo, 11/22/44/48 kHz, ring buffer + `SDL_LockAudioDevice`).
+  - Dodano eksporty `RW_IN_*`, `KBD_*` oraz `RW_VID_GetNumDisplays` i `RW_VID_GetDisplayMode` w `ref_gl/ref_gl.def` i `linux/gl_sdl2.c`, dzięki czemu klient `r1q2.exe` pobiera listę monitorów i natywne tryby bezpośrednio z zainicjalizowanego podsystemu wideo SDL2 w `ref_r1q2gl.dll` przy linkowaniu statycznym `libSDL2-static.a`.
+  - W `win32/sys_win.c` przekierowano `Sys_SendKeyEvents()` na `KBD_Update_fp()`, wyłączono przechwytywanie kolejki komunikatów okna przez `PeekMessage` w trybie klienta i zainicjalizowano `ActiveApp = true`.
+  - W `client/cl_main.c` (`CL_RefreshInputs` i `CL_SendCommand_Synchronous`) odblokowano bezwarunkowe wywołanie `IN_Commands()` (wcześniej ograniczone przez `#if (defined JOYSTICK) || (defined LINUX)`), dzięki czemu kliknięcia przycisków myszy `Mouse 1`–`Mouse 5` z `RW_IN_Commands` działają również na Windowsie.
+  - Zmieniono zachowanie przechwytywania myszy w `linux/gl_sdl2.c` (wspólne dla Linuxa i Windowsa): mysz pozostaje przechwycona w kontekście okna gry również po wejściu do menu (`Esc`) i konsoli (co umożliwia bindowanie `Mouse 1`–`Mouse 5` w `Customize Controls` oraz przygotowuje grunt pod własny kursor w menu), a `RW_IN_Activate(false)` wyłącza jedynie obracanie kamery 3D w tle; kursor systemowy jest uwalniany przy `Alt+Tab` (utrata fokusu okna) lub `Ctrl+G`.
+  - Naprawiono pobieranie map i tekstur przez HTTP oraz fallback do tradycyjnego protokołu UDP Quake 2 (`server/sv_main.c`, `client/cl_http.c`, `client/cl_parse.c`, `client/cl_main.c`):
+    - ustawiono domyślne `allow_download "1"` w kliencie (`"0"` tylko dla `DEDICATED_ONLY`),
+    - zmieniono inicjalizację libcurl na `curl_global_init(CURL_GLOBAL_DEFAULT)` i dodano `remove()` przed `rename()` dla zgodności z `msvcrt` na Windowsie,
+    - dodano `CL_ResetHTTPQueue()` przy `CL_ParseServerData()` (czyszczenie kolejki HTTP pomiędzy kolejnymi mapami w rotacji serwera przy zachowaniu `cls.downloadServer`),
+    - dodano automatyczny fallback do pobierania UDP dla map `.bsp` (etap `ENV_CNT`) oraz tekstur `.wal` (etap `TEXTURE_CNT + 2`), gdy plik nie znajduje się na serwerze HTTP i zwraca `404 File Not Found`.
+  - Usunięto z `client/menu.c` nieaktualne pod SDL2 opcje Win32 `directinput mouse` i `xp mouse acceleration fix`.
+- Weryfikacja: czysty build Linux (`make distclean && make -j"$(nproc)"`) oraz cross-build Windows (`make -j"$(nproc)" win32` ze statycznym `SDL2 2.30.0`, `libpng`, `libjpeg-turbo`, `libcurl`, `zlib`) zakończone kodem 0; tablice importów PE32 zawierają wyłącznie biblioteki systemowe Windows.
+- Testy na żywym serwerze `217.182.73.153:27910` potwierdziły zarówno pełne pobieranie HTTP (`maps/redyard.bsp`, `maps/q2dm2fast.bsp`, `textures/fryziu/fmet3_5_yellow.wal`), jak i automatyczne przełączenie na tradycyjne pobieranie UDP Quake 2 po `HTTP 404` oraz wznawianie pobierania `.tmp`. Użytkownik potwierdził działanie obrazu, dźwięku i myszy na Linuxie oraz Windows 11.
+
+---
+*Signed-off-by: **Cline** (`[CLINE-AI-SIG::R1Q2-SDL2-2026-11-17]`)*

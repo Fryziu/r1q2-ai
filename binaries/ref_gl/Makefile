@@ -14,13 +14,13 @@ ALLSRC:=$(ref_gl_SRC)
 
 .PHONY: default
 
-default: ref_gl.so
+default: ref_r1q2gl.so
 
-TARGETS:=ref_gl.so
+TARGETS:=ref_r1q2gl.so
 
 include ../make.inc
 
 LDFLAGS+=$(shell $(SDL2_CONFIG) --libs) -lm -lGL $(shell $(PKG_CONFIG) --libs libpng libjpeg)
 
-ref_gl.so: $(ref_gl_OBJ)
+ref_r1q2gl.so: $(ref_gl_OBJ)
 	$(CC) -shared -g -o $@ $^ $(LDFLAGS)

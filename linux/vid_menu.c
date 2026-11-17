@@ -2,6 +2,7 @@
 
 #include "../client/client.h"
 #include "../client/qmenu.h"
+#include "../linux/rw_linux.h"
 
 #define REF_OPENGL	0
 #define VIDEO_MODE_CUSTOM	-1
@@ -92,7 +93,7 @@ static menuaction_s		s_defaults_action[2];
 static char s_display_names[MAX_SDL_DISPLAYS][80];
 static const char *s_display_name_ptrs[MAX_SDL_DISPLAYS + 1];
 
-static void DriverCallback( void *unused )
+static void VID_DriverCallback( void *unused )
 {
 	s_ref_list[0].curvalue = s_ref_list[1].curvalue = REF_OPENGL;
 	s_current_menu = &s_opengl_menu;
@@ -192,7 +193,7 @@ static void ApplyChanges( void *unused )
 /*
 ** VID_MenuInit
 */
-void VID_MenuInit( void )
+void EXPORT VID_MenuInit( void )
 {
 	static const char *resolutions[] = 
 	{
@@ -252,7 +253,7 @@ void VID_MenuInit( void )
 		sw_stipplealpha = Cvar_Get( "sw_stipplealpha", "0", CVAR_ARCHIVE );
 
 	if ( !_windowed_mouse)
-        _windowed_mouse = Cvar_Get( "_windowed_mouse", "0", CVAR_ARCHIVE );
+        _windowed_mouse = Cvar_Get( "_windowed_mouse", "1", CVAR_ARCHIVE );
 
 	s_mode_list[SOFTWARE_MENU].curvalue = sw_mode->value;
 	if (gl_mode->intvalue == VIDEO_MODE_DESKTOP)
@@ -268,7 +269,7 @@ void VID_MenuInit( void )
 			s_mode_list[OPENGL_MENU].curvalue = 12;
 	}
 
-	display_count = SDL_GetNumVideoDisplays ();
+	display_count = RW_VID_GetNumDisplays_fp ? RW_VID_GetNumDisplays_fp () : SDL_GetNumVideoDisplays ();
 	if (display_count < 1)
 		display_count = 1;
 	else if (display_count > MAX_SDL_DISPLAYS)
@@ -276,11 +277,22 @@ void VID_MenuInit( void )
 
 	for (i = 0; i < display_count; i++)
 	{
-		display_name = SDL_GetDisplayName (i);
-		if (!display_name)
-			display_name = "unknown";
-		if (SDL_GetCurrentDisplayMode (i, &display_mode) < 0)
-			display_mode.w = display_mode.h = 0;
+		if (RW_VID_GetDisplayMode_fp)
+		{
+			display_name = NULL;
+			if (RW_VID_GetDisplayMode_fp (i, &display_mode.w, &display_mode.h, &display_name) < 0)
+				display_mode.w = display_mode.h = 0;
+			if (!display_name)
+				display_name = "unknown";
+		}
+		else
+		{
+			display_name = SDL_GetDisplayName (i);
+			if (!display_name)
+				display_name = "unknown";
+			if (SDL_GetCurrentDisplayMode (i, &display_mode) < 0)
+				display_mode.w = display_mode.h = 0;
+		}
 		Com_sprintf (s_display_names[i], sizeof(s_display_names[i]),
 			"%d: %.32s %dx%d", i, display_name, display_mode.w, display_mode.h);
 		s_display_name_ptrs[i] = s_display_names[i];
@@ -313,7 +325,7 @@ void VID_MenuInit( void )
 		s_ref_list[i].generic.name = "driver";
 		s_ref_list[i].generic.x = 0;
 		s_ref_list[i].generic.y = 0;
-		s_ref_list[i].generic.callback = DriverCallback;
+		s_ref_list[i].generic.callback = VID_DriverCallback;
 		s_ref_list[i].itemnames = refs;
 
 		s_mode_list[i].generic.type = MTYPE_SPINCONTROL;

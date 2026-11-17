@@ -54,6 +54,7 @@ void CL_FinishDownload (void)
 	CL_DownloadFileName(oldn, sizeof(oldn), cls.downloadtempname);
 	CL_DownloadFileName(newn, sizeof(newn), cls.downloadname);
 
+	remove (newn);
 	r = rename (oldn, newn);
 	if (r)
 		Com_Printf ("failed to rename.\n", LOG_CLIENT);
@@ -84,19 +85,19 @@ Returns true if the file exists, otherwise it attempts
 to start a download from the server.
 ===============
 */
+static char last_udp_filename[MAX_OSPATH] = {0};
+
+void CL_ResetLastDownloadFilename (void)
+{
+	last_udp_filename[0] = 0;
+}
+
 qboolean	CL_CheckOrDownloadFile (const char *filename)
 {
 	FILE	*fp;
 	int		length;
 	char	*p;
 	char	name[MAX_OSPATH];
-	static char lastfilename[MAX_OSPATH] = {0};
-
-	//r1: don't attempt same file many times
-	if (!strcmp (filename, lastfilename))
-		return true;
-
-	strcpy (lastfilename, filename);
 
 	if (strstr (filename, ".."))
 	{
@@ -139,6 +140,12 @@ qboolean	CL_CheckOrDownloadFile (const char *filename)
 	else
 #endif
 	{
+		//r1: don't attempt same UDP file many times
+		if (!strcmp (filename, last_udp_filename))
+			return true;
+
+		Q_strncpy (last_udp_filename, filename, sizeof(last_udp_filename)-1);
+
 		strcpy (cls.downloadname, filename);
 
 		//r1: fix \ to /
@@ -485,6 +492,21 @@ qboolean CL_ParseServerData (void)
 //
 	CL_ClearState ();
 	cls.state = ca_connected;
+
+	if (cls.download)
+	{
+		fclose (cls.download);
+		cls.download = NULL;
+	}
+	cls.downloadpending = false;
+	cls.downloadtempname[0] = 0;
+	cls.downloadname[0] = 0;
+	cls.downloadposition = 0;
+	cls.downloadpercent = 0;
+
+#ifdef USE_CURL
+	CL_ResetHTTPQueue ();
+#endif
 
 // parse protocol version number
 	i = MSG_ReadLong (&net_message);

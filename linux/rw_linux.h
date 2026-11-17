@@ -6,6 +6,9 @@ extern void (*KBD_Update_fp)(void);
 extern void (*KBD_Init_fp)(Key_Event_fp_t fp);
 extern void (*KBD_Close_fp)(void);
 
+extern int (*RW_VID_GetNumDisplays_fp)(void);
+extern int (*RW_VID_GetDisplayMode_fp)(int display_index, int *width, int *height, const char **name);
+
 typedef struct in_state {
 	// Pointers to functions back in client, set by vid_so
 	void (*IN_CenterView_fp)(void);

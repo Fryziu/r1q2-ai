@@ -143,6 +143,7 @@ void Le_Reset (void);
 #ifdef USE_CURL
 void CL_CancelHTTPDownloads (qboolean permKill);
 void CL_InitHTTPDownloads (void);
+void CL_ResetHTTPQueue (void);
 qboolean CL_QueueHTTPDownload (const char *quakePath);
 void CL_RunHTTPDownloads (void);
 qboolean CL_PendingHTTPDownloads (void);

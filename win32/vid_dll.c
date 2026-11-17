@@ -997,7 +997,16 @@ void VID_ReloadRefresh (void)
 		if (strstr (vid_ref->string, "..") || strchr (vid_ref->string, '/') || strchr (vid_ref->string, '\\'))
 			Com_Error (ERR_FATAL, "Bad vid_ref '%s'", vid_ref->string);
 
-		Com_sprintf( name, sizeof(name), "ref_%s.dll", vid_ref->string );
+		if ( Q_stricmp( vid_ref->string, "gl" ) == 0 ||
+			 Q_stricmp( vid_ref->string, "r1gl" ) == 0 ||
+			 Q_stricmp( vid_ref->string, "r1q2gl" ) == 0 )
+		{
+			strcpy( name, "ref_r1q2gl.dll" );
+		}
+		else
+		{
+			Com_sprintf( name, sizeof(name), "ref_%s.dll", vid_ref->string );
+		}
 
 		errMessage[0] = 0;
 

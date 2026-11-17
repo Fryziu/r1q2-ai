@@ -21,11 +21,11 @@ ALLSRC:=$(game_SRC)
 
 .PHONY: default
 
-default: game$(ARCH).so
+default: r1q2_game$(ARCH).so
 
-TARGETS:=game$(ARCH).so
+TARGETS:=r1q2_game$(ARCH).so
 
-game$(ARCH).so: $(game_OBJ)
+r1q2_game$(ARCH).so: $(game_OBJ)
 	$(CC) -shared -g -o $@ $^ $(LDFLAGS)
 
 include ../make.inc

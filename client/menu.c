@@ -1028,11 +1028,6 @@ static menuframework_s	s_r1q2_options_menu;
 static menuseparator_s	s_r1q2_warning;
 static menuseparator_s	s_r1q2_warning2;
 
-#ifdef _WIN32
-static menulist_s		s_r1q2_dinput;
-static menulist_s		s_r1q2_winxp;
-#endif
-
 static menulist_s		s_r1q2_defer;
 static menulist_s		s_r1q2_async;
 static menulist_s		s_r1q2_autorecord;
@@ -1076,20 +1071,6 @@ static void CustomizeControlsFunc( void *unused )
 	M_Menu_Keys_f();
 }
 
-#ifdef _WIN32
-static void DirectInputFunc (void *unused)
-{
-	Cvar_SetValue ("m_directinput", (float)s_r1q2_dinput.curvalue);
-	IN_Restart_f();
-}
-
-static void AccelFixFunc (void *unused)
-{
-	Cvar_SetValue ("m_fixaccel", (float)s_r1q2_winxp.curvalue);
-	IN_Restart_f();
-}
-#endif
-
 static void DeferFunc (void *unused)
 {
 	Cvar_SetValue ("cl_defermodels", (float)s_r1q2_defer.curvalue);
@@ -1131,16 +1112,6 @@ static void R1Q2_MenuInit (void)
 		0
 	};
 
-#ifdef _WIN32
-	static const char *dinputnames[] = 
-	{
-		"disabled",
-		"buffered",
-		"immediate",
-		0
-	};
-#endif
-
 	/*
 	** configure controls menu and menu items
 	*/
@@ -1158,24 +1129,6 @@ static void R1Q2_MenuInit (void)
 	s_r1q2_warning2.generic.name = "that you wish to keep will need adding to a config.";
 	s_r1q2_warning2.generic.x    = 160;
 	s_r1q2_warning2.generic.y	 = 10;
-
-#ifdef _WIN32
-	s_r1q2_dinput.generic.type = MTYPE_SPINCONTROL;
-	s_r1q2_dinput.generic.x	= 0;
-	s_r1q2_dinput.generic.y	= 30;
-	s_r1q2_dinput.generic.name	= "directinput mouse";
-	s_r1q2_dinput.generic.callback = DirectInputFunc;
-	s_r1q2_dinput.itemnames = dinputnames;
-	s_r1q2_dinput.curvalue = (int)ClampCvar (0, 2, Cvar_VariableValue ("m_directinput"));
-
-	s_r1q2_winxp.generic.type = MTYPE_SPINCONTROL;
-	s_r1q2_winxp.generic.x	= 0;
-	s_r1q2_winxp.generic.y	= 40;
-	s_r1q2_winxp.generic.name	= "xp mouse acceleration fix";
-	s_r1q2_winxp.generic.callback = AccelFixFunc;
-	s_r1q2_winxp.itemnames = yesno_names;
-	s_r1q2_winxp.curvalue = (int)ClampCvar (0, 1, Cvar_VariableValue ("m_fixaccel"));
-#endif
 
 	s_r1q2_defer.generic.type = MTYPE_SPINCONTROL;
 	s_r1q2_defer.generic.x	= 0;
@@ -1248,11 +1201,6 @@ static void R1Q2_MenuInit (void)
 
 	Menu_AddItem (&s_r1q2_options_menu, (void *)&s_r1q2_warning);
 	Menu_AddItem (&s_r1q2_options_menu, (void *)&s_r1q2_warning2);
-
-#ifdef _WIN32
-	Menu_AddItem( &s_r1q2_options_menu, ( void * ) &s_r1q2_dinput );
-	Menu_AddItem( &s_r1q2_options_menu, ( void * ) &s_r1q2_winxp );
-#endif
 
 	Menu_AddItem( &s_r1q2_options_menu, ( void * ) &s_r1q2_defer );
 	Menu_AddItem( &s_r1q2_options_menu, ( void * ) &s_r1q2_async );
